@@ -13,6 +13,7 @@ import { connectionsApi, authApi } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth'
 import { cn, formatDateTime } from '@/lib/utils'
 import { Database, Plus, LogOut, RefreshCw, Loader2, AlertCircle, CheckCircle2, Clock, Zap } from 'lucide-react'
+import { ThemeToggle } from '@/components/theme-toggle'
 
 type ConnectionStatus = 'pending' | 'analyzing' | 'indexing' | 'ready' | 'error' | 'updating'
 
@@ -31,8 +32,8 @@ interface Connection {
 const statusConfig: Record<ConnectionStatus, { icon: React.ElementType; color: string; label: string }> = {
     pending: { icon: Clock, color: 'text-yellow-500', label: 'Pending' },
     analyzing: { icon: RefreshCw, color: 'text-blue-500', label: 'Analyzing' },
-    indexing: { icon: Zap, color: 'text-purple-500', label: 'Indexing' },
-    ready: { icon: CheckCircle2, color: 'text-green-500', label: 'Ready' },
+    indexing: { icon: Zap, color: 'text-emerald-500', label: 'Indexing' },
+    ready: { icon: CheckCircle2, color: 'text-emerald-500', label: 'Ready' },
     error: { icon: AlertCircle, color: 'text-red-500', label: 'Error' },
     updating: { icon: RefreshCw, color: 'text-blue-500', label: 'Updating' },
 }
@@ -147,6 +148,7 @@ export default function HomePage() {
                         <span className="text-sm text-muted-foreground">
                             Welcome, <span className="text-foreground font-medium">{user.username}</span>
                         </span>
+                        <ThemeToggle />
                         <Button variant="ghost" size="sm" onClick={handleLogout}>
                             <LogOut className="h-4 w-4 mr-2" />
                             Logout

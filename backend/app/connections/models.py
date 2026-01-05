@@ -4,7 +4,7 @@ Database Connection Models
 SQLModel entities for managing external database connections.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING
 
@@ -52,8 +52,8 @@ class DatabaseConnection(SQLModel, table=True):
 
     # Metadata
     owner_id: int = Field(foreign_key="users.id")
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
 
     # Relationships
     owner: "User" = Relationship(back_populates="connections")
@@ -70,7 +70,7 @@ class ConnectionShare(SQLModel, table=True):
     connection_id: int = Field(foreign_key="database_connections.id")
     user_id: int = Field(foreign_key="users.id")
     can_edit: bool = Field(default=False)  # Can edit insights/metadata
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
     # Relationships
     connection: DatabaseConnection = Relationship(back_populates="shares")
@@ -106,8 +106,8 @@ class TableInsight(SQLModel, table=True):
     vector_id: str | None = Field(default=None, max_length=100)
 
     # Metadata
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
 
     # Relationships
     connection: DatabaseConnection = Relationship(back_populates="insights")

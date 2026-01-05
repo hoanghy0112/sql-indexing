@@ -4,7 +4,7 @@ Database Connections Router
 API endpoints for managing external database connections.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 from sqlmodel import select
@@ -266,7 +266,7 @@ async def update_connection(
         elif hasattr(connection, key):
             setattr(connection, key, value)
 
-    connection.updated_at = datetime.now(timezone.utc)
+    connection.updated_at = datetime.utcnow()
     session.add(connection)
     await session.commit()
     await session.refresh(connection)

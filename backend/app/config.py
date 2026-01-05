@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     # Embedding Model Settings
     # ==========================================================================
     embedding_model: str = Field(
-        default="google/gemma-embedding-300m",
+        default="sentence-transformers/all-MiniLM-L6-v2",
         alias="EMBEDDING_MODEL",
     )
     embedding_model_path: str | None = Field(default=None, alias="EMBEDDING_MODEL_PATH")

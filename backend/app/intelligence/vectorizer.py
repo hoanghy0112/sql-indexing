@@ -50,7 +50,7 @@ async def ensure_collection_exists() -> None:
     collection_names = [c.name for c in collections.collections]
 
     if collection_name not in collection_names:
-        # Get embedding dimension from model
+        # Create new collection
         model = get_embedding_model()
         embedding_dim = model.get_sentence_embedding_dimension()
 
@@ -61,6 +61,26 @@ async def ensure_collection_exists() -> None:
                 distance=models.Distance.COSINE,
             ),
         )
+    else:
+        # Check if dimensions match
+        model = get_embedding_model()
+        embedding_dim = model.get_sentence_embedding_dimension()
+        
+        collection_info = client.get_collection(collection_name)
+        current_dim = collection_info.config.params.vectors.size
+        
+        if current_dim != embedding_dim:
+            # Dimension mismatch - recreate collection
+            print(f"Dimension mismatch (current: {current_dim}, new: {embedding_dim}). Recreating collection...")
+            client.delete_collection(collection_name)
+            
+            client.create_collection(
+                collection_name=collection_name,
+                vectors_config=models.VectorParams(
+                    size=embedding_dim,
+                    distance=models.Distance.COSINE,
+                ),
+            )
 
 
 def generate_vector_id(connection_id: int, table_name: str) -> str:

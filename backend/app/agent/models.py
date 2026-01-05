@@ -4,7 +4,7 @@ Chat Models
 SQLModel entities for chat history and sessions.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum
 
 from sqlmodel import Field, SQLModel
@@ -27,8 +27,8 @@ class ChatSession(SQLModel, table=True):
     connection_id: int = Field(foreign_key="database_connections.id", index=True)
     user_id: int = Field(foreign_key="users.id", index=True)
     title: str | None = Field(default=None, max_length=200)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class ChatMessage(SQLModel, table=True):
@@ -46,7 +46,7 @@ class ChatMessage(SQLModel, table=True):
     explanation: str | None = Field(default=None)
     data_json: str | None = Field(default=None)  # JSON serialized result data
     
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class SQLHistory(SQLModel, table=True):
@@ -61,4 +61,4 @@ class SQLHistory(SQLModel, table=True):
     execution_time_ms: int | None = Field(default=None)
     row_count: int | None = Field(default=None)
     error: str | None = Field(default=None)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=datetime.utcnow)

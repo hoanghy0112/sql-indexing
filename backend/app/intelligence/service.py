@@ -9,7 +9,7 @@ Orchestrates the full database analysis workflow:
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
@@ -69,7 +69,7 @@ async def save_table_insight(
         insight.row_count = table.row_count
         insight.insight_document = document
         insight.vector_id = vector_id
-        insight.updated_at = datetime.now(timezone.utc)
+        insight.updated_at = datetime.utcnow()
     else:
         # Create new
         insight = TableInsight(
@@ -262,7 +262,7 @@ async def analyze_database(connection_id: int) -> None:
             connection.status = ConnectionStatus.READY
             connection.status_message = "Analysis complete"
             connection.analysis_progress = 100.0
-            connection.last_analyzed_at = datetime.now(timezone.utc)
+            connection.last_analyzed_at = datetime.utcnow()
             session.add(connection)
             await session.commit()
 

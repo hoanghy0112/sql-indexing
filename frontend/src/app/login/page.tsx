@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast'
 import { authApi } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth'
 import { Database, Loader2 } from 'lucide-react'
+import { ThemeToggle } from '@/components/theme-toggle'
 
 export default function LoginPage() {
     const router = useRouter()
@@ -52,7 +53,10 @@ export default function LoginPage() {
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/10 p-4">
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/10 p-4 relative">
+            <div className="absolute top-4 right-4">
+                <ThemeToggle />
+            </div>
             <Card className="w-full max-w-md">
                 <CardHeader className="space-y-1 text-center">
                     <div className="flex justify-center mb-4">

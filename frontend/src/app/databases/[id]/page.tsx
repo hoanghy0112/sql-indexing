@@ -521,6 +521,32 @@ export default function DatabasePage() {
                                 <CardHeader>
                                     <CardTitle className="text-red-500">Danger Zone</CardTitle>
                                     <CardDescription>
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => reanalyzeMutation.mutate()}
+                                        disabled={reanalyzeMutation.isPending || isProcessing}
+                                        className="w-full justify-start"
+                                    >
+                                        {reanalyzeMutation.isPending ? (
+                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        ) : (
+                                            <RefreshCw className="h-4 w-4 mr-2" />
+                                        )}
+                                        Re-index Database
+                                    </Button>
+                                    <p className="text-xs text-muted-foreground mt-2">
+                                        This will re-analyze the database schema and regenerate all embeddings.
+                                    </p>
+                                </CardContent>
+                            </Card>
+
+                            <Card className="border-red-500/50">
+                                <CardHeader>
+                                    <CardTitle className="text-red-500">Danger Zone</CardTitle>
+                                    <CardDescription>
                                         Irreversible actions
                                     </CardDescription>
                                 </CardHeader>

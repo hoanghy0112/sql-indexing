@@ -5,7 +5,7 @@ API endpoints for the chat agent.
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
@@ -167,7 +167,7 @@ async def chat_with_database(
             session.add(sql_history)
 
         # Update session timestamp
-        chat_session.updated_at = datetime.now(timezone.utc)
+        chat_session.updated_at = datetime.utcnow()
         session.add(chat_session)
 
         await session.commit()

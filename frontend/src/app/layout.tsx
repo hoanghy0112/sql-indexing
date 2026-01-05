@@ -4,7 +4,11 @@ import './globals.css'
 import { Providers } from './providers'
 import { Toaster } from '@/components/ui/toaster'
 
-const inter = Inter({ subsets: ['latin'] })
+const inter = Inter({
+    subsets: ['latin'],
+    display: 'swap',
+    variable: '--font-inter',
+})
 
 export const metadata: Metadata = {
     title: 'SQL Index - Database RAG Platform',
@@ -17,8 +21,8 @@ export default function RootLayout({
     children: React.ReactNode
 }) {
     return (
-        <html lang="en" className="dark">
-            <body className={inter.className}>
+        <html lang="en" suppressHydrationWarning>
+            <body className={`${inter.className} antialiased`}>
                 <Providers>
                     {children}
                     <Toaster />
