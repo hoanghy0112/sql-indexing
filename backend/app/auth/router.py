@@ -93,7 +93,7 @@ async def login(
 
     access_token_expires = timedelta(minutes=settings.jwt_expire_minutes)
     access_token = create_access_token(
-        data={"sub": user.id, "username": user.username},
+        data={"sub": str(user.id), "username": user.username},
         expires_delta=access_token_expires,
     )
 
@@ -121,7 +121,7 @@ async def refresh_token(current_user: CurrentUser) -> Token:
     """Refresh the JWT token for the current user."""
     access_token_expires = timedelta(minutes=settings.jwt_expire_minutes)
     access_token = create_access_token(
-        data={"sub": current_user.id, "username": current_user.username},
+        data={"sub": str(current_user.id), "username": current_user.username},
         expires_delta=access_token_expires,
     )
 

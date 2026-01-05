@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
-import { authApi } from '@/lib/api'
+import { authApi, getErrorMessage } from '@/lib/api'
 import { Database, Loader2 } from 'lucide-react'
 
 export default function RegisterPage() {
@@ -61,7 +61,7 @@ export default function RegisterPage() {
         } catch (error: any) {
             toast({
                 title: 'Registration failed',
-                description: error.response?.data?.detail || 'Please try again.',
+                description: getErrorMessage(error),
                 variant: 'destructive',
             })
         } finally {

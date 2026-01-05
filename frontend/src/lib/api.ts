@@ -9,6 +9,42 @@ export const api = axios.create({
   },
 })
 
+/**
+ * Extracts a human-readable error message from an Axios error,
+ * specifically handling FastAPI's validation error structure.
+ */
+export function getErrorMessage(error: any): string {
+  if (!error.response) {
+    return error.message || 'A network error occurred. Please try again.'
+  }
+
+  const data = error.response.data
+  
+  // Handle FastAPI HTTPException detail
+  if (typeof data.detail === 'string') {
+    return data.detail
+  }
+
+  // Handle FastAPI/Pydantic validation errors (array of objects)
+  if (Array.isArray(data.detail)) {
+    return data.detail
+      .map((err: any) => {
+        const loc = err.loc ? err.loc.join('.') : ''
+        return `${loc}: ${err.msg}`
+      })
+      .join(', ')
+  }
+
+  // Handle other object-based details
+  if (typeof data.detail === 'object' && data.detail !== null) {
+    if (data.detail.message) return data.detail.message
+    return JSON.stringify(data.detail)
+  }
+
+  // Fallback to general message or data
+  return data.message || data.error || 'An unexpected error occurred.'
+}
+
 // Add auth token to requests
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {

@@ -49,10 +49,16 @@ def decode_access_token(token: str) -> TokenData | None:
     """Decode and validate a JWT access token."""
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
-        user_id: int | None = payload.get("sub")
+        sub: str | None = payload.get("sub")
         username: str | None = payload.get("username")
 
-        if user_id is None:
+        if sub is None:
+            return None
+
+        # Convert sub from string back to int for user_id
+        try:
+            user_id = int(sub)
+        except (ValueError, TypeError):
             return None
 
         return TokenData(user_id=user_id, username=username)
