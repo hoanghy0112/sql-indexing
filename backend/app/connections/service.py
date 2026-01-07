@@ -17,6 +17,7 @@ from app.connections.models import (
     ConnectionShare,
     ConnectionStatus,
     DatabaseConnection,
+    SharePermission,
 )
 from app.users.models import User
 
@@ -151,15 +152,16 @@ async def get_connection_by_id(
 
 async def get_user_connections(
     session: AsyncSession, user: User
-) -> list[tuple[DatabaseConnection, bool, bool]]:
+) -> list[tuple[DatabaseConnection, bool, SharePermission | None]]:
     """
     Get all connections accessible by a user (owned + shared).
-    Returns list of (connection, is_owner, can_edit) tuples.
+    Returns list of (connection, is_owner, permission) tuples.
+    Permission is None for owner (has all permissions).
     """
     # Get owned connections
     owned_stmt = select(DatabaseConnection).where(DatabaseConnection.owner_id == user.id)
     owned_result = await session.execute(owned_stmt)
-    owned = [(conn, True, True) for conn in owned_result.scalars().all()]
+    owned = [(conn, True, None) for conn in owned_result.scalars().all()]
 
     # Get shared connections
     shared_stmt = (
@@ -168,25 +170,26 @@ async def get_user_connections(
         .where(ConnectionShare.user_id == user.id)
     )
     shared_result = await session.execute(shared_stmt)
-    shared = [(conn, False, share.can_edit) for conn, share in shared_result.all()]
+    shared = [(conn, False, share.permission) for conn, share in shared_result.all()]
 
     return owned + shared
 
 
 async def user_can_access_connection(
     session: AsyncSession, user: User, connection_id: int
-) -> tuple[bool, bool]:
+) -> tuple[bool, SharePermission | None]:
     """
     Check if user can access a connection.
-    Returns (can_access, can_edit).
+    Returns (can_access, permission).
+    Permission is None for owner (has all permissions).
     """
     connection = await get_connection_by_id(session, connection_id)
     if not connection:
-        return False, False
+        return False, None
 
     # Owner has full access
     if connection.owner_id == user.id:
-        return True, True
+        return True, None  # None means owner (full access)
 
     # Check shares
     share_stmt = select(ConnectionShare).where(
@@ -197,16 +200,16 @@ async def user_can_access_connection(
     share = result.scalar_one_or_none()
 
     if share:
-        return True, share.can_edit
+        return True, share.permission
 
-    return False, False
+    return False, None
 
 
 async def share_connection(
     session: AsyncSession,
     connection: DatabaseConnection,
     user_id: int,
-    can_edit: bool = False,
+    permission: SharePermission = SharePermission.VIEW,
 ) -> ConnectionShare:
     """Share a connection with another user."""
     # Check if already shared
@@ -218,7 +221,7 @@ async def share_connection(
     existing = result.scalar_one_or_none()
 
     if existing:
-        existing.can_edit = can_edit
+        existing.permission = permission
         session.add(existing)
         await session.commit()
         await session.refresh(existing)
@@ -227,7 +230,7 @@ async def share_connection(
     share = ConnectionShare(
         connection_id=connection.id,
         user_id=user_id,
-        can_edit=can_edit,
+        permission=permission,
     )
     session.add(share)
     await session.commit()

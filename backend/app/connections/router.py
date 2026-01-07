@@ -11,7 +11,7 @@ from sqlmodel import select
 
 from app.auth.dependencies import CurrentUser, DBSession
 from app.auth.schemas import MessageResponse
-from app.connections.models import ConnectionShare, ConnectionStatus, DatabaseConnection
+from app.connections.models import ConnectionShare, ConnectionStatus, DatabaseConnection, SharePermission
 from app.connections.schemas import (
     ConnectionCreate,
     ConnectionFromURL,
@@ -200,9 +200,9 @@ async def list_connections(
             analysis_progress=conn.analysis_progress,
             last_analyzed_at=conn.last_analyzed_at,
             is_owner=is_owner,
-            can_edit=can_edit,
+            permission=permission,
         )
-        for conn, is_owner, can_edit in connections
+        for conn, is_owner, permission in connections
     ]
 
 
@@ -248,12 +248,23 @@ async def update_connection(
     current_user: CurrentUser,
     session: DBSession,
 ) -> ConnectionResponse:
-    """Update a database connection (owner only)."""
-    connection = await get_connection_by_id(session, connection_id)
-    if not connection or connection.owner_id != current_user.id:
+    """Update a database connection (owner or users with owner permission only)."""
+    can_access, permission = await user_can_access_connection(session, current_user, connection_id)
+    if not can_access:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Connection not found",
+        )
+    
+    connection = await get_connection_by_id(session, connection_id)
+    # Only original owner or shared users with owner permission can update
+    is_original_owner = connection.owner_id == current_user.id
+    has_owner_permission = permission == SharePermission.OWNER
+    
+    if not is_original_owner and not has_owner_permission:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to update this connection",
         )
 
     # Update fields
@@ -346,19 +357,23 @@ async def reanalyze_connection(
     background_tasks: BackgroundTasks,
 ) -> MessageResponse:
     """Trigger re-analysis of a database connection."""
-    can_access, can_edit = await user_can_access_connection(session, current_user, connection_id)
+    can_access, permission = await user_can_access_connection(session, current_user, connection_id)
     if not can_access:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Connection not found",
         )
-    if not can_edit:
+    
+    connection = await get_connection_by_id(session, connection_id)
+    # Only original owner or shared users with owner permission can reanalyze
+    is_original_owner = connection.owner_id == current_user.id
+    has_owner_permission = permission == SharePermission.OWNER
+    
+    if not is_original_owner and not has_owner_permission:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You don't have permission to re-analyze this connection",
         )
-
-    connection = await get_connection_by_id(session, connection_id)
 
     if connection.status in [ConnectionStatus.ANALYZING, ConnectionStatus.INDEXING]:
         raise HTTPException(
@@ -415,7 +430,7 @@ async def list_shares(
             user_id=user.id,
             username=user.username,
             email=user.email,
-            can_edit=share.can_edit,
+            permission=share.permission,
             created_at=share.created_at,
         )
         for share, user in shares_result.all()
@@ -459,14 +474,14 @@ async def add_share(
             detail="Cannot share with yourself",
         )
 
-    share = await share_connection(session, connection, user.id, share_data.can_edit)
+    share = await share_connection(session, connection, user.id, share_data.permission)
 
     return ShareResponse(
         id=share.id,
         user_id=user.id,
         username=user.username,
         email=user.email,
-        can_edit=share.can_edit,
+        permission=share.permission,
         created_at=share.created_at,
     )
 

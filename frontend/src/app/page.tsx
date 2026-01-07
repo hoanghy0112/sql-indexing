@@ -12,8 +12,9 @@ import { useToast } from '@/hooks/use-toast'
 import { connectionsApi, authApi } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth'
 import { cn, formatDateTime } from '@/lib/utils'
-import { Database, Plus, LogOut, RefreshCw, Loader2, AlertCircle, CheckCircle2, Clock, Zap } from 'lucide-react'
+import { Database, Plus, LogOut, RefreshCw, Loader2, AlertCircle, CheckCircle2, Clock, Zap, Users } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme-toggle'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 type ConnectionStatus = 'pending' | 'analyzing' | 'indexing' | 'ready' | 'error' | 'updating'
 
@@ -26,7 +27,7 @@ interface Connection {
     analysis_progress: number
     last_analyzed_at: string | null
     is_owner: boolean
-    can_edit: boolean
+    permission: string | null // null for owner, 'chat'/'view'/'owner' for shared
 }
 
 const statusConfig: Record<ConnectionStatus, { icon: React.ElementType; color: string; label: string }> = {
@@ -54,6 +55,7 @@ export default function HomePage() {
         username: '',
         password: '',
     })
+    const [filter, setFilter] = useState<'all' | 'owned' | 'shared'>('all')
 
     // Check auth and fetch user
     useEffect(() => {
@@ -261,78 +263,110 @@ export default function HomePage() {
                     </Dialog>
                 </div>
 
-                {/* Connections Grid */}
-                {isLoading ? (
-                    <div className="flex items-center justify-center py-12">
-                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    </div>
-                ) : connections?.length === 0 ? (
-                    <Card className="border-dashed">
-                        <CardContent className="flex flex-col items-center justify-center py-12">
-                            <Database className="h-12 w-12 text-muted-foreground mb-4" />
-                            <h3 className="text-lg font-medium mb-2">No databases connected</h3>
-                            <p className="text-muted-foreground mb-4">
-                                Add your first PostgreSQL database to get started
-                            </p>
-                            <Button onClick={() => setAddDialogOpen(true)}>
-                                <Plus className="h-4 w-4 mr-2" />
-                                Add Database
-                            </Button>
-                        </CardContent>
-                    </Card>
-                ) : (
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                        {connections?.map((conn) => {
-                            const status = statusConfig[conn.status]
-                            const StatusIcon = status.icon
-                            const isProcessing = ['analyzing', 'indexing', 'updating'].includes(conn.status)
+                {/* Filter Tabs */}
+                <Tabs value={filter} onValueChange={(v) => setFilter(v as 'all' | 'owned' | 'shared')} className="mb-6">
+                    <TabsList>
+                        <TabsTrigger value="all" className="gap-2">
+                            <Database className="h-4 w-4" />
+                            All ({connections?.length || 0})
+                        </TabsTrigger>
+                        <TabsTrigger value="owned" className="gap-2">
+                            <Database className="h-4 w-4" />
+                            My DB ({connections?.filter(c => c.is_owner).length || 0})
+                        </TabsTrigger>
+                        <TabsTrigger value="shared" className="gap-2">
+                            <Users className="h-4 w-4" />
+                            Shared ({connections?.filter(c => !c.is_owner).length || 0})
+                        </TabsTrigger>
+                    </TabsList>
+                </Tabs>
 
-                            return (
-                                <Card
-                                    key={conn.id}
-                                    className="cursor-pointer hover:border-primary/50 transition-colors"
-                                    onClick={() => router.push(`/databases/${conn.id}`)}
-                                >
-                                    <CardHeader className="pb-3">
-                                        <div className="flex items-start justify-between">
-                                            <div>
-                                                <CardTitle className="text-lg">{conn.name}</CardTitle>
-                                                <CardDescription className="text-sm">
-                                                    {conn.database}
-                                                </CardDescription>
-                                            </div>
-                                            <div className={cn('flex items-center space-x-1 text-sm', status.color)}>
-                                                <StatusIcon className={cn('h-4 w-4', isProcessing && 'animate-spin')} />
-                                                <span>{status.label}</span>
-                                            </div>
-                                        </div>
-                                    </CardHeader>
-                                    <CardContent>
-                                        {isProcessing && (
-                                            <div className="mb-3">
-                                                <div className="h-2 bg-muted rounded-full overflow-hidden">
-                                                    <div
-                                                        className="h-full bg-primary transition-all"
-                                                        style={{ width: `${conn.analysis_progress}%` }}
-                                                    />
+                {/* Connections Grid */}
+                {(() => {
+                    const filteredConnections = connections?.filter(conn => {
+                        if (filter === 'owned') return conn.is_owner
+                        if (filter === 'shared') return !conn.is_owner
+                        return true
+                    })
+
+                    return isLoading ? (
+                        <div className="flex items-center justify-center py-12">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        </div>
+                    ) : filteredConnections?.length === 0 ? (
+                        <Card className="border-dashed">
+                            <CardContent className="flex flex-col items-center justify-center py-12">
+                                <Database className="h-12 w-12 text-muted-foreground mb-4" />
+                                <h3 className="text-lg font-medium mb-2">
+                                    {filter === 'all' ? 'No databases connected' :
+                                        filter === 'owned' ? 'No databases owned' : 'No shared databases'}
+                                </h3>
+                                <p className="text-muted-foreground mb-4">
+                                    {filter === 'all' ? 'Add your first PostgreSQL database to get started' :
+                                        filter === 'owned' ? 'Add a database to get started' : 'Ask a colleague to share a database with you'}
+                                </p>
+                                {filter !== 'shared' && (
+                                    <Button onClick={() => setAddDialogOpen(true)}>
+                                        <Plus className="h-4 w-4 mr-2" />
+                                        Add Database
+                                    </Button>
+                                )}
+                            </CardContent>
+                        </Card>
+                    ) : (
+                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                            {filteredConnections?.map((conn) => {
+                                const status = statusConfig[conn.status]
+                                const StatusIcon = status.icon
+                                const isProcessing = ['analyzing', 'indexing', 'updating'].includes(conn.status)
+
+                                return (
+                                    <Card
+                                        key={conn.id}
+                                        className="cursor-pointer hover:border-primary/50 transition-colors"
+                                        onClick={() => router.push(`/databases/${conn.id}`)}
+                                    >
+                                        <CardHeader className="pb-3">
+                                            <div className="flex items-start justify-between">
+                                                <div>
+                                                    <CardTitle className="text-lg">{conn.name}</CardTitle>
+                                                    <CardDescription className="text-sm">
+                                                        {conn.database}
+                                                    </CardDescription>
                                                 </div>
-                                                <p className="text-xs text-muted-foreground mt-1">
-                                                    {Math.round(conn.analysis_progress)}% complete
-                                                </p>
+                                                <div className={cn('flex items-center space-x-1 text-sm', status.color)}>
+                                                    <StatusIcon className={cn('h-4 w-4', isProcessing && 'animate-spin')} />
+                                                    <span>{status.label}</span>
+                                                </div>
                                             </div>
-                                        )}
-                                        <div className="flex items-center justify-between text-sm text-muted-foreground">
-                                            <span>{conn.is_owner ? 'Owner' : 'Shared'}</span>
-                                            {conn.last_analyzed_at && (
-                                                <span>Analyzed {formatDateTime(conn.last_analyzed_at)}</span>
+                                        </CardHeader>
+                                        <CardContent>
+                                            {isProcessing && (
+                                                <div className="mb-3">
+                                                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                                        <div
+                                                            className="h-full bg-primary transition-all"
+                                                            style={{ width: `${conn.analysis_progress}%` }}
+                                                        />
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground mt-1">
+                                                        {Math.round(conn.analysis_progress)}% complete
+                                                    </p>
+                                                </div>
                                             )}
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            )
-                        })}
-                    </div>
-                )}
+                                            <div className="flex items-center justify-between text-sm text-muted-foreground">
+                                                <span>{conn.is_owner ? 'Owner' : 'Shared'}</span>
+                                                {conn.last_analyzed_at && (
+                                                    <span>Analyzed {formatDateTime(conn.last_analyzed_at)}</span>
+                                                )}
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                )
+                            })}
+                        </div>
+                    )
+                })()}
             </main>
         </div>
     )

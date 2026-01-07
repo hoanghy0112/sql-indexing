@@ -25,6 +25,14 @@ class ConnectionStatus(str, Enum):
     UPDATING = "updating"  # Re-analysis in progress
 
 
+class SharePermission(str, Enum):
+    """Permission level for shared connections."""
+
+    CHAT = "chat"  # Only Ask DB tab (General + Chat)
+    VIEW = "view"  # Ask DB + Intelligence tabs (General + Chat + Intelligence)
+    OWNER = "owner"  # Full access including Settings
+
+
 class DatabaseConnection(SQLModel, table=True):
     """External database connection entity."""
 
@@ -69,7 +77,7 @@ class ConnectionShare(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     connection_id: int = Field(foreign_key="database_connections.id")
     user_id: int = Field(foreign_key="users.id")
-    can_edit: bool = Field(default=False)  # Can edit insights/metadata
+    permission: SharePermission = Field(default=SharePermission.VIEW)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     # Relationships

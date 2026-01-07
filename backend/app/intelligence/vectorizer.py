@@ -37,7 +37,7 @@ def get_embedding_model() -> SentenceTransformer:
     global _embedding_model
     if _embedding_model is None:
         model_path = settings.embedding_model_path or settings.embedding_model
-        _embedding_model = SentenceTransformer(model_path)
+        _embedding_model = SentenceTransformer(model_path, device="cpu")
     return _embedding_model
 
 

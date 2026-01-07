@@ -129,7 +129,7 @@ export const connectionsApi = {
   // Shares
   listShares: (id: number) => api.get(`/connections/${id}/shares`),
 
-  addShare: (id: number, data: { user_id: number; can_edit: boolean }) =>
+  addShare: (id: number, data: { user_id: number; permission: string }) =>
     api.post(`/connections/${id}/shares`, data),
 
   removeShare: (connectionId: number, userId: number) =>
@@ -166,6 +166,13 @@ export const chatApi = {
 
   deleteSession: (connectionId: number, sessionId: number) =>
     api.delete(`/chat/${connectionId}/sessions/${sessionId}`),
+
+  // Public sharing
+  toggleShare: (connectionId: number, sessionId: number) =>
+    api.post(`/chat/${connectionId}/sessions/${sessionId}/share`),
+
+  getPublicChat: (shareToken: string) =>
+    api.get(`/chat/public/${shareToken}`),
 }
 
 // System API

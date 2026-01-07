@@ -21,6 +21,14 @@ class ConnectionStatus(str, Enum):
     UPDATING = "updating"
 
 
+class SharePermission(str, Enum):
+    """Permission level for shared connections."""
+
+    CHAT = "chat"
+    VIEW = "view"
+    OWNER = "owner"
+
+
 class ConnectionCreate(BaseModel):
     """Schema for creating a new database connection."""
 
@@ -97,14 +105,14 @@ class ConnectionListResponse(BaseModel):
     analysis_progress: float
     last_analyzed_at: datetime | None
     is_owner: bool
-    can_edit: bool
+    permission: SharePermission | None  # None for owner
 
 
 class ShareCreate(BaseModel):
     """Schema for sharing a connection."""
 
     user_id: int
-    can_edit: bool = False
+    permission: SharePermission = SharePermission.VIEW
 
 
 class ShareResponse(BaseModel):
@@ -114,7 +122,7 @@ class ShareResponse(BaseModel):
     user_id: int
     username: str
     email: str
-    can_edit: bool
+    permission: SharePermission
     created_at: datetime
 
 

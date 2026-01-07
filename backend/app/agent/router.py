@@ -5,15 +5,19 @@ API endpoints for the chat agent.
 """
 
 import json
+import secrets
 from datetime import datetime
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from app.agent.graph import run_agent
 from app.agent.models import ChatMessage, ChatSession, MessageRole, SQLHistory
 from app.auth.dependencies import CurrentUser, DBSession
+from app.connections.models import DatabaseConnection
 from app.connections.service import (
     decrypt_password,
     get_connection_by_id,
@@ -22,6 +26,9 @@ from app.connections.service import (
 from app.rag.tools import set_connection_details
 
 router = APIRouter()
+
+
+
 
 
 class ChatRequest(BaseModel):
@@ -348,3 +355,137 @@ async def delete_session(
     await session.commit()
 
     return {"message": "Session deleted successfully"}
+
+
+# =============================================================================
+# Public Chat Sharing Endpoints
+# =============================================================================
+
+
+class ShareSessionResponse(BaseModel):
+    """Response for session sharing."""
+
+    is_public: bool
+    share_token: str | None
+    share_url: str | None
+
+
+class PublicChatResponse(BaseModel):
+    """Response for public chat access."""
+
+    session_id: int
+    title: str | None
+    database_name: str
+    connection_name: str
+    messages: list[dict]
+    created_at: datetime
+    updated_at: datetime
+
+
+@router.post("/{connection_id}/sessions/{session_id}/share", response_model=ShareSessionResponse)
+async def toggle_session_share(
+    connection_id: int,
+    session_id: int,
+    current_user: CurrentUser,
+    session: DBSession,
+) -> ShareSessionResponse:
+    """Toggle public sharing for a chat session."""
+    # Check access
+    can_access, _ = await user_can_access_connection(session, current_user, connection_id)
+    if not can_access:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Connection not found",
+        )
+
+    # Get session
+    stmt = select(ChatSession).where(
+        ChatSession.id == session_id,
+        ChatSession.connection_id == connection_id,
+        ChatSession.user_id == current_user.id,
+    )
+    result = await session.execute(stmt)
+    chat_session = result.scalar_one_or_none()
+
+    if not chat_session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found",
+        )
+
+    # Toggle public sharing
+    if chat_session.is_public:
+        # Disable public sharing
+        chat_session.is_public = False
+        chat_session.share_token = None
+    else:
+        # Enable public sharing with new token
+        chat_session.is_public = True
+        chat_session.share_token = secrets.token_urlsafe(32)
+
+    session.add(chat_session)
+    await session.commit()
+    await session.refresh(chat_session)
+
+    return ShareSessionResponse(
+        is_public=chat_session.is_public,
+        share_token=chat_session.share_token,
+        share_url=f"/chat/{chat_session.share_token}" if chat_session.share_token else None,
+    )
+
+
+@router.get("/public/{share_token}", response_model=PublicChatResponse)
+async def get_public_chat(
+    share_token: str,
+    db: DBSession,
+) -> PublicChatResponse:
+    """Get a publicly shared chat session (no auth required)."""
+    # Get session by share token
+    stmt = select(ChatSession).where(
+        ChatSession.share_token == share_token,
+        ChatSession.is_public == True,
+    )
+    result = await db.execute(stmt)
+    chat_session = result.scalar_one_or_none()
+
+    if not chat_session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Chat not found or is no longer public",
+        )
+
+    # Get connection info
+    conn_stmt = select(DatabaseConnection).where(DatabaseConnection.id == chat_session.connection_id)
+    conn_result = await db.execute(conn_stmt)
+    connection = conn_result.scalar_one_or_none()
+
+    # Get messages
+    msg_stmt = (
+        select(ChatMessage)
+        .where(ChatMessage.session_id == chat_session.id)
+        .order_by(ChatMessage.created_at)
+    )
+    msg_result = await db.execute(msg_stmt)
+    messages = msg_result.scalars().all()
+
+    return PublicChatResponse(
+        session_id=chat_session.id,
+        title=chat_session.title,
+        database_name=connection.database if connection else "Unknown",
+        connection_name=connection.name if connection else "Unknown",
+        messages=[
+            {
+                "id": m.id,
+                "role": m.role.value,
+                "content": m.content,
+                "sql": m.sql_query,
+                "explanation": m.explanation,
+                "data": json.loads(m.data_json) if m.data_json else None,
+                "created_at": m.created_at.isoformat(),
+            }
+            for m in messages
+        ],
+        created_at=chat_session.created_at,
+        updated_at=chat_session.updated_at,
+    )
+

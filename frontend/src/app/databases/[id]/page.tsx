@@ -9,14 +9,22 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
-import { connectionsApi, intelligenceApi, chatApi, systemApi } from '@/lib/api'
+import { connectionsApi, intelligenceApi, chatApi, systemApi, usersApi } from '@/lib/api'
 import { useAuthStore } from '@/lib/auth'
 import { cn, formatDateTime, formatNumber } from '@/lib/utils'
 import {
     ArrowLeft, Database, MessageSquare, Brain, Settings, Loader2,
     RefreshCw, Trash2, Share2, Send, CheckCircle2, AlertCircle,
-    Table2, Columns, Hash, FileText, Sparkles, Save
+    Table2, Columns, Hash, FileText, Sparkles, Save, UserPlus, X, Copy, Link
 } from 'lucide-react'
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog'
 
 export default function DatabasePage() {
     const router = useRouter()
@@ -46,6 +54,18 @@ export default function DatabasePage() {
     const [editUsername, setEditUsername] = useState('')
     const [editPassword, setEditPassword] = useState('')
     const [editSslMode, setEditSslMode] = useState('prefer')
+
+    // Sharing state
+    const [shareUserSearch, setShareUserSearch] = useState('')
+    const [sharePermission, setSharePermission] = useState<'chat' | 'view' | 'owner'>('view')
+    const [searchResults, setSearchResults] = useState<Array<{ id: number; username: string; email: string }>>([])
+    const [selectedUser, setSelectedUser] = useState<{ id: number; username: string; email: string } | null>(null)
+    const [isShareDialogOpen, setIsShareDialogOpen] = useState(false)
+
+    // Chat share state
+    const [currentSessionId, setCurrentSessionId] = useState<number | null>(null)
+    const [chatShareInfo, setChatShareInfo] = useState<{ is_public: boolean; share_url: string | null } | null>(null)
+    const [isChatShareDialogOpen, setIsChatShareDialogOpen] = useState(false)
 
     // Fetch connection details
     const { data: connection, isLoading } = useQuery({
@@ -113,9 +133,13 @@ export default function DatabasePage() {
     // Chat mutation
     const chatMutation = useMutation({
         mutationFn: (question: string) =>
-            chatApi.send(connectionId, { question, explain_mode: explainMode }),
+            chatApi.send(connectionId, { question, explain_mode: explainMode, session_id: currentSessionId || undefined }),
         onSuccess: (response) => {
             const data = response.data
+            // Track session ID for sharing
+            if (data.session_id && !currentSessionId) {
+                setCurrentSessionId(data.session_id)
+            }
             setChatMessages((prev) => [
                 ...prev,
                 {
@@ -190,6 +214,92 @@ export default function DatabasePage() {
 
         updateMutation.mutate(updateData)
     }
+
+    // Fetch shares
+    const { data: sharesData, refetch: refetchShares } = useQuery({
+        queryKey: ['shares', connectionId],
+        queryFn: async () => {
+            const response = await connectionsApi.listShares(connectionId)
+            return response.data
+        },
+        enabled: isAuthenticated && !!connectionId,
+    })
+
+    // Add share mutation
+    const addShareMutation = useMutation({
+        mutationFn: (data: { user_id: number; permission: string }) =>
+            connectionsApi.addShare(connectionId, data),
+        onSuccess: () => {
+            refetchShares()
+            setSelectedUser(null)
+            setShareUserSearch('')
+            toast({ title: 'Share added', description: 'User can now access this database' })
+        },
+        onError: (error: any) => {
+            toast({
+                title: 'Failed to add share',
+                description: error.response?.data?.detail || 'An error occurred',
+                variant: 'destructive',
+            })
+        },
+    })
+
+    // Remove share mutation
+    const removeShareMutation = useMutation({
+        mutationFn: (userId: number) => connectionsApi.removeShare(connectionId, userId),
+        onSuccess: () => {
+            refetchShares()
+            toast({ title: 'Share removed' })
+        },
+        onError: (error: any) => {
+            toast({
+                title: 'Failed to remove share',
+                description: error.response?.data?.detail || 'An error occurred',
+                variant: 'destructive',
+            })
+        },
+    })
+
+    // User search handler
+    const handleUserSearch = async (query: string) => {
+        setShareUserSearch(query)
+        if (query.length < 2) {
+            setSearchResults([])
+            return
+        }
+        try {
+            const response = await usersApi.search(query)
+            setSearchResults(response.data || [])
+        } catch (error) {
+            setSearchResults([])
+        }
+    }
+
+    // Handle add share
+    const handleAddShare = () => {
+        if (!selectedUser) return
+        addShareMutation.mutate({ user_id: selectedUser.id, permission: sharePermission })
+    }
+
+    // Chat share toggle mutation
+    const chatShareMutation = useMutation({
+        mutationFn: (sessionId: number) => chatApi.toggleShare(connectionId, sessionId),
+        onSuccess: (response) => {
+            const data = response.data
+            setChatShareInfo({ is_public: data.is_public, share_url: data.share_url })
+            toast({
+                title: data.is_public ? 'Chat is now public' : 'Chat is now private',
+                description: data.is_public ? 'Anyone with the link can view this chat' : 'Chat link has been disabled',
+            })
+        },
+        onError: (error: any) => {
+            toast({
+                title: 'Failed to update sharing',
+                description: error.response?.data?.detail || 'An error occurred',
+                variant: 'destructive',
+            })
+        },
+    })
 
     // Initialize form state from connection data
     useEffect(() => {
@@ -401,15 +511,80 @@ export default function DatabasePage() {
                             <CardHeader className="border-b">
                                 <div className="flex items-center justify-between">
                                     <CardTitle>Ask your Database</CardTitle>
-                                    <div className="flex items-center space-x-2">
-                                        <Label htmlFor="explain-mode" className="text-sm">Explain Mode</Label>
-                                        <input
-                                            id="explain-mode"
-                                            type="checkbox"
-                                            checked={explainMode}
-                                            onChange={(e) => setExplainMode(e.target.checked)}
-                                            className="rounded"
-                                        />
+                                    <div className="flex items-center space-x-4">
+                                        <div className="flex items-center space-x-2">
+                                            <Label htmlFor="explain-mode" className="text-sm">Explain Mode</Label>
+                                            <input
+                                                id="explain-mode"
+                                                type="checkbox"
+                                                checked={explainMode}
+                                                onChange={(e) => setExplainMode(e.target.checked)}
+                                                className="rounded"
+                                            />
+                                        </div>
+                                        {chatMessages.length > 0 && currentSessionId && (
+                                            <Dialog open={isChatShareDialogOpen} onOpenChange={setIsChatShareDialogOpen}>
+                                                <DialogTrigger asChild>
+                                                    <Button variant="outline" size="sm">
+                                                        <Share2 className="h-4 w-4 mr-2" />
+                                                        Share
+                                                    </Button>
+                                                </DialogTrigger>
+                                                <DialogContent>
+                                                    <DialogHeader>
+                                                        <DialogTitle>Share this Chat</DialogTitle>
+                                                        <DialogDescription>
+                                                            Make this conversation public so anyone with the link can view it.
+                                                        </DialogDescription>
+                                                    </DialogHeader>
+                                                    <div className="space-y-4 py-4">
+                                                        <div className="flex items-center justify-between">
+                                                            <div>
+                                                                <p className="font-medium">Public Access</p>
+                                                                <p className="text-sm text-muted-foreground">
+                                                                    {chatShareInfo?.is_public
+                                                                        ? 'Anyone with the link can view'
+                                                                        : 'Only you can access this chat'}
+                                                                </p>
+                                                            </div>
+                                                            <Button
+                                                                variant={chatShareInfo?.is_public ? "destructive" : "default"}
+                                                                onClick={() => chatShareMutation.mutate(currentSessionId)}
+                                                                disabled={chatShareMutation.isPending}
+                                                            >
+                                                                {chatShareMutation.isPending ? (
+                                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                                ) : chatShareInfo?.is_public ? (
+                                                                    'Make Private'
+                                                                ) : (
+                                                                    'Make Public'
+                                                                )}
+                                                            </Button>
+                                                        </div>
+                                                        {chatShareInfo?.is_public && chatShareInfo?.share_url && (
+                                                            <div className="space-y-2">
+                                                                <Label>Share Link</Label>
+                                                                <div className="flex gap-2">
+                                                                    <Input
+                                                                        value={`${window.location.origin}${chatShareInfo.share_url}`}
+                                                                        readOnly
+                                                                    />
+                                                                    <Button
+                                                                        variant="outline"
+                                                                        onClick={() => {
+                                                                            navigator.clipboard.writeText(`${window.location.origin}${chatShareInfo.share_url}`)
+                                                                            toast({ title: 'Link copied!' })
+                                                                        }}
+                                                                    >
+                                                                        <Copy className="h-4 w-4" />
+                                                                    </Button>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </DialogContent>
+                                            </Dialog>
+                                        )}
                                     </div>
                                 </div>
                             </CardHeader>
@@ -667,6 +842,116 @@ export default function DatabasePage() {
                                             )}
                                             Save Changes
                                         </Button>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            {/* Share Database Card */}
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <Share2 className="h-5 w-5" />
+                                        Share Database
+                                    </CardTitle>
+                                    <CardDescription>
+                                        Share this database with other users
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    {/* Add new share */}
+                                    <div className="space-y-3">
+                                        <div className="flex gap-2">
+                                            <div className="flex-1 relative">
+                                                <Input
+                                                    placeholder="Search users by email or username..."
+                                                    value={shareUserSearch}
+                                                    onChange={(e) => handleUserSearch(e.target.value)}
+                                                />
+                                                {searchResults.length > 0 && (
+                                                    <div className="absolute z-10 w-full mt-1 bg-popover border rounded-md shadow-lg max-h-40 overflow-auto">
+                                                        {searchResults.map((user) => (
+                                                            <div
+                                                                key={user.id}
+                                                                className="px-3 py-2 hover:bg-muted cursor-pointer text-sm"
+                                                                onClick={() => {
+                                                                    setSelectedUser(user)
+                                                                    setShareUserSearch(user.email)
+                                                                    setSearchResults([])
+                                                                }}
+                                                            >
+                                                                <span className="font-medium">{user.username}</span>
+                                                                <span className="text-muted-foreground ml-2">{user.email}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <select
+                                                value={sharePermission}
+                                                onChange={(e) => setSharePermission(e.target.value as 'chat' | 'view' | 'owner')}
+                                                className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                                            >
+                                                <option value="chat">Chat Only</option>
+                                                <option value="view">View</option>
+                                                <option value="owner">Owner</option>
+                                            </select>
+                                            <Button
+                                                onClick={handleAddShare}
+                                                disabled={!selectedUser || addShareMutation.isPending}
+                                            >
+                                                {addShareMutation.isPending ? (
+                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                ) : (
+                                                    <UserPlus className="h-4 w-4" />
+                                                )}
+                                            </Button>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">
+                                            <strong>Chat:</strong> Ask DB only | <strong>View:</strong> Chat + Intelligence | <strong>Owner:</strong> Full access
+                                        </p>
+                                    </div>
+
+                                    {/* Current shares */}
+                                    <div className="space-y-2">
+                                        <h4 className="text-sm font-medium">Current Access</h4>
+                                        {sharesData?.owner && (
+                                            <div className="flex items-center justify-between py-2 px-3 rounded-md bg-muted/50">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-sm font-medium">{sharesData.owner.username}</span>
+                                                    <span className="text-xs text-muted-foreground">{sharesData.owner.email}</span>
+                                                </div>
+                                                <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary">Owner</span>
+                                            </div>
+                                        )}
+                                        {sharesData?.shares?.map((share: any) => (
+                                            <div key={share.id} className="flex items-center justify-between py-2 px-3 rounded-md bg-muted/50">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-sm font-medium">{share.username}</span>
+                                                    <span className="text-xs text-muted-foreground">{share.email}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className={cn(
+                                                        "text-xs px-2 py-0.5 rounded",
+                                                        share.permission === 'owner' ? 'bg-purple-500/10 text-purple-500' :
+                                                            share.permission === 'view' ? 'bg-blue-500/10 text-blue-500' :
+                                                                'bg-green-500/10 text-green-500'
+                                                    )}>
+                                                        {share.permission}
+                                                    </span>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => removeShareMutation.mutate(share.user_id)}
+                                                        disabled={removeShareMutation.isPending}
+                                                    >
+                                                        <X className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {(!sharesData?.shares || sharesData.shares.length === 0) && (
+                                            <p className="text-sm text-muted-foreground py-2">No users have been added yet</p>
+                                        )}
                                     </div>
                                 </CardContent>
                             </Card>
