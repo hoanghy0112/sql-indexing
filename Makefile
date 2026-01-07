@@ -192,7 +192,7 @@ format: ## Format all code
 
 ollama-pull: ## Pull required Ollama models
 	@echo "$(GREEN)Pulling Ollama models...$(NC)"
-	docker compose exec ollama ollama pull qwen3:4b
+	docker compose exec ollama ollama pull qwen2.5:3b
 	@echo "$(GREEN)Models pulled successfully!$(NC)"
 
 ollama-list: ## List available Ollama models

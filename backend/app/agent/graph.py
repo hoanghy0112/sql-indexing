@@ -14,6 +14,7 @@ import re
 from typing import Any, TypedDict
 
 import ollama
+from ollama import Client
 from langgraph.graph import END, StateGraph
 
 from app.config import get_settings
@@ -63,10 +64,14 @@ Identify:
 4. Any sorting or limiting requirements?
 
 Respond with a brief intent summary (1-2 sentences).
+If the question is a greeting (like "Hello", "Hi") or a generic polite phrase, just summarize it as such.
 """
 
+    # Create client with configured URL
+    client = Client(host=settings.ollama_base_url)
+
     try:
-        response = ollama.chat(
+        response = client.chat(
             model=settings.ollama_model,
             messages=[{"role": "user", "content": prompt}],
             options={"temperature": 0.1, "num_predict": 200},
@@ -78,7 +83,15 @@ Respond with a brief intent summary (1-2 sentences).
         # Remove thinking content if present
         content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
 
-        state["intent"] = content
+        # Check for greetings
+        greetings = ["hello", "hi", "good morning", "good afternoon", "good evening", "hey"]
+        is_greeting = any(g in question.lower() for g in greetings)
+        
+        if is_greeting and len(question.split()) <= 3:
+            state["intent"] = "GREETING"
+            state["response"] = "Hello! I am your database assistant. How can I help you query your data today?"
+        else:
+            state["intent"] = content
 
     except Exception as e:
         state["intent"] = f"Find data related to: {question}"
@@ -124,6 +137,9 @@ async def generate_node(state: AgentState) -> AgentState:
     explain_mode = state["explain_mode"]
     relevant_tables = state.get("relevant_tables", [])
 
+    if state.get("intent") == "GREETING" and state.get("response"):
+        return state
+
     if not relevant_tables:
         state["response"] = "I couldn't find any relevant tables for your question."
         state["error"] = "No tables to query"
@@ -156,8 +172,11 @@ Rules:
 SQL:
 """
 
+    # Create client with configured URL
+    client = Client(host=settings.ollama_base_url)
+
     try:
-        response = ollama.chat(
+        response = client.chat(
             model=settings.ollama_model,
             messages=[{"role": "user", "content": sql_prompt}],
             options={"temperature": 0.1, "num_predict": 500},
@@ -258,8 +277,11 @@ Sample data: {sample_str}
 Give a 1-2 sentence summary of what the data shows. Be concise.
 """
 
+    # Create client with configured URL
+    client = Client(host=settings.ollama_base_url)
+
     try:
-        response = ollama.chat(
+        response = client.chat(
             model=settings.ollama_model,
             messages=[{"role": "user", "content": prompt}],
             options={"temperature": 0.3, "num_predict": 150},

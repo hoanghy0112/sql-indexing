@@ -127,68 +127,80 @@ async def execute_sql_query(
             "require": True,
         }
 
-        conn = await asyncio.wait_for(
-            asyncpg.connect(
-                host=details["host"],
-                port=details["port"],
-                database=details["database"],
-                user=details["username"],
-                password=details["password"],
-                ssl=ssl_map.get(details.get("ssl_mode", "prefer"), "prefer"),
-            ),
-            timeout=30.0,
-        )
+        max_retries = 3
+        retry_delay = 1.0
+        last_error = None
 
-        try:
-            # Execute query
-            rows = await asyncio.wait_for(
-                conn.fetch(sql),
-                timeout=60.0,
-            )
+        for attempt in range(max_retries):
+            conn = None
+            try:
+                # 1. Connect
+                conn = await asyncpg.connect(
+                    host=details["host"],
+                    port=details["port"],
+                    database=details["database"],
+                    user=details["username"],
+                    password=details["password"],
+                    ssl=ssl_map.get(details.get("ssl_mode", "prefer"), "prefer"),
+                    timeout=20.0,
+                    command_timeout=60.0,
+                )
 
-            if not rows:
+                # 2. Execute query
+                rows = await conn.fetch(sql, timeout=60.0)
+
+                # 3. Process results
+                if not rows:
+                    return {
+                        "status": "success",
+                        "message": "Query executed but returned no rows",
+                        "columns": [],
+                        "rows": [],
+                        "row_count": 0,
+                    }
+
+                columns = list(rows[0].keys())
+                data = []
+                for row in rows[:max_rows]:
+                    data.append([_serialize_value(row[col]) for col in columns])
+
                 return {
                     "status": "success",
-                    "message": "Query executed but returned no rows",
-                    "columns": [],
-                    "rows": [],
-                    "row_count": 0,
+                    "message": f"Returned {len(data)} rows (attempt {attempt + 1})",
+                    "columns": columns,
+                    "rows": data,
+                    "row_count": len(rows),
+                    "truncated": len(rows) > max_rows,
                 }
 
-            # Get column names
-            columns = list(rows[0].keys())
+            except (asyncpg.PostgresConnectionError, asyncpg.InterfaceError, asyncio.TimeoutError) as e:
+                last_error = e
+                if "unexpected connection_lost" in str(e).lower() or isinstance(e, asyncio.TimeoutError):
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(retry_delay * (attempt + 1))
+                        continue
+                break
+            except asyncpg.PostgresSyntaxError as e:
+                return {
+                    "status": "error",
+                    "message": f"SQL syntax error: {str(e)}",
+                    "columns": [],
+                    "rows": [],
+                }
+            except Exception as e:
+                last_error = e
+                break
+            finally:
+                if conn:
+                    await conn.close()
 
-            # Convert to list of lists, limiting rows
-            data = []
-            for row in rows[:max_rows]:
-                data.append([_serialize_value(row[col]) for col in columns])
-
-            return {
-                "status": "success",
-                "message": f"Returned {len(data)} rows",
-                "columns": columns,
-                "rows": data,
-                "row_count": len(rows),
-                "truncated": len(rows) > max_rows,
-            }
-
-        finally:
-            await conn.close()
-
-    except asyncio.TimeoutError:
         return {
             "status": "error",
-            "message": "Query timed out",
+            "message": f"Query failed after {max_retries} attempts: {str(last_error)}",
             "columns": [],
             "rows": [],
         }
-    except asyncpg.PostgresSyntaxError as e:
-        return {
-            "status": "error",
-            "message": f"SQL syntax error: {str(e)}",
-            "columns": [],
-            "rows": [],
-        }
+
     except Exception as e:
         return {
             "status": "error",

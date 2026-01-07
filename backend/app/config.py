@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     # Ollama LLM Settings
     # ==========================================================================
     ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
-    ollama_model: str = Field(default="qwen3:4b", alias="OLLAMA_MODEL")
+    ollama_model: str = Field(default="qwen2.5:3b", alias="OLLAMA_MODEL")
 
     # ==========================================================================
     # Embedding Model Settings

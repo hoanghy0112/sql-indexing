@@ -23,9 +23,15 @@ from app.users.models import User
 settings = get_settings()
 
 # In production, use a proper key management system
-# This is a placeholder - generate with Fernet.generate_key()
-ENCRYPTION_KEY = settings.jwt_secret.encode()[:32].ljust(32, b"0")
-fernet = Fernet(Fernet.generate_key())  # Generate for now, store in env for prod
+import base64
+
+# Derive stable key from JWT_SECRET
+# Ensure 32 bytes and URL-safe base64 encoding
+key_bytes = settings.jwt_secret.encode()[:32].ljust(32, b"0")
+stable_key = base64.urlsafe_b64encode(key_bytes)
+
+# Initialize Fernet with stable key
+fernet = Fernet(stable_key)
 
 
 def encrypt_password(password: str) -> str:

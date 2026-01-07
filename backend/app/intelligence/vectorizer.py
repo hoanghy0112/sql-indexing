@@ -182,13 +182,13 @@ async def search_similar(
         query_filter = models.Filter(must=filter_conditions)
 
     # Search
-    results = client.search(
+    results = client.query_points(
         collection_name=collection_name,
-        query_vector=query_embedding,
+        query=query_embedding,
         query_filter=query_filter,
         limit=limit,
         with_payload=True,
-    )
+    ).points
 
     return [
         {

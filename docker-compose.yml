@@ -160,6 +160,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      target: deps
     container_name: sqlindex-frontend
     restart: unless-stopped
     depends_on:
