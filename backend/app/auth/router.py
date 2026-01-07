@@ -10,8 +10,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import get_settings
-from app.database import get_session
+from app.auth.dependencies import CurrentUser
 from app.auth.schemas import (
     MessageResponse,
     Token,
@@ -26,7 +25,8 @@ from app.auth.service import (
     get_user_by_email,
     get_user_by_username,
 )
-from app.auth.dependencies import CurrentUser
+from app.config import get_settings
+from app.database import get_session
 
 settings = get_settings()
 router = APIRouter()

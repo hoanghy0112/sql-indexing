@@ -4,22 +4,22 @@ Database RAG & Analytics Platform - FastAPI Application
 Main entry point for the backend API server.
 """
 
-from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import get_settings
-from app.database import init_db, close_db
+from app.agent.router import router as agent_router
 
 # Import routers
 from app.auth.router import router as auth_router
-from app.users.router import router as users_router
+from app.config import get_settings
 from app.connections.router import router as connections_router
+from app.database import close_db, init_db
 from app.intelligence.router import router as intelligence_router
-from app.agent.router import router as agent_router
 from app.system.router import router as system_router
+from app.users.router import router as users_router
 
 settings = get_settings()
 
@@ -38,8 +38,8 @@ app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     description="""
-    A platform that allows users to connect PostgreSQL databases, 
-    automatically analyze their schema/metadata using AI, 
+    A platform that allows users to connect PostgreSQL databases,
+    automatically analyze their schema/metadata using AI,
     and chat with their data using a multi-agent system.
     """,
     docs_url="/docs",

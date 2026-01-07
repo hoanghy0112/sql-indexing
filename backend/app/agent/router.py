@@ -7,11 +7,9 @@ API endpoints for the chat agent.
 import json
 import secrets
 from datetime import datetime
-from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from app.agent.graph import run_agent
@@ -443,7 +441,7 @@ async def get_public_chat(
     # Get session by share token
     stmt = select(ChatSession).where(
         ChatSession.share_token == share_token,
-        ChatSession.is_public == True,
+        ChatSession.is_public.is_(True),
     )
     result = await db.execute(stmt)
     chat_session = result.scalar_one_or_none()

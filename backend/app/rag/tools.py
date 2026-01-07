@@ -9,9 +9,9 @@ import json
 from typing import Any
 
 import asyncpg
-from langchain_core.tools import StructuredTool
 from langchain_core.pydantic_v1 import BaseModel as LangchainBaseModel
 from langchain_core.pydantic_v1 import Field as LangchainField
+from langchain_core.tools import StructuredTool
 
 from app.config import get_settings
 from app.intelligence.vectorizer import search_similar
@@ -214,9 +214,9 @@ def _serialize_value(value: Any) -> Any:
     """Serialize a database value to JSON-compatible format."""
     if value is None:
         return None
-    if isinstance(value, (int, float, str, bool)):
+    if isinstance(value, int | float | str | bool):
         return value
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, list | tuple):
         return [_serialize_value(v) for v in value]
     if isinstance(value, dict):
         return {k: _serialize_value(v) for k, v in value.items()}

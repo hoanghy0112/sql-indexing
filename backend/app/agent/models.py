@@ -27,11 +27,11 @@ class ChatSession(SQLModel, table=True):
     connection_id: int = Field(foreign_key="database_connections.id", index=True)
     user_id: int = Field(foreign_key="users.id", index=True)
     title: str | None = Field(default=None, max_length=200)
-    
+
     # Public sharing
     is_public: bool = Field(default=False)
     share_token: str | None = Field(default=None, max_length=64, index=True)
-    
+
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -45,12 +45,12 @@ class ChatMessage(SQLModel, table=True):
     session_id: int = Field(foreign_key="chat_sessions.id", index=True)
     role: MessageRole
     content: str
-    
+
     # For assistant responses with explain_mode
     sql_query: str | None = Field(default=None)
     explanation: str | None = Field(default=None)
     data_json: str | None = Field(default=None)  # JSON serialized result data
-    
+
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 

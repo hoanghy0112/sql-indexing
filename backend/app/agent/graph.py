@@ -13,12 +13,11 @@ import json
 import re
 from typing import Any, TypedDict
 
-import ollama
-from ollama import Client
 from langgraph.graph import END, StateGraph
+from ollama import Client
 
 from app.config import get_settings
-from app.rag.tools import execute_sql_query, search_database_data, rows_to_csv
+from app.rag.tools import execute_sql_query, rows_to_csv, search_database_data
 
 settings = get_settings()
 
@@ -86,7 +85,7 @@ If the question is a greeting (like "Hello", "Hi") or a generic polite phrase, j
         # Check for greetings
         greetings = ["hello", "hi", "good morning", "good afternoon", "good evening", "hey"]
         is_greeting = any(g in question.lower() for g in greetings)
-        
+
         if is_greeting and len(question.split()) <= 3:
             state["intent"] = "GREETING"
             state["response"] = "Hello! I am your database assistant. How can I help you query your data today?"
@@ -241,7 +240,7 @@ SQL:
 def extract_sql(text: str) -> str | None:
     """Extract SQL query from LLM response. Only returns the first statement if multiple exist."""
     sql = None
-    
+
     # Try to find SQL in code blocks
     code_block_match = re.search(r"```(?:sql)?\s*(.*?)```", text, re.DOTALL | re.IGNORECASE)
     if code_block_match:
@@ -257,24 +256,24 @@ def extract_sql(text: str) -> str | None:
             sql = select_match.group(1).strip()
         elif text.strip().upper().startswith("SELECT"):
             sql = text.strip()
-    
+
     if not sql:
         return None
-    
+
     # Handle multiple statements - only take the first one
     # Split by semicolons followed by whitespace and a new statement keyword
     # This is tricky because semicolons can appear inside strings
     # Simple approach: split by semicolon followed by newline and SELECT/WITH/INSERT/UPDATE/DELETE
     multi_stmt_pattern = r";\s*(?=\n\s*(?:SELECT|WITH|INSERT|UPDATE|DELETE))"
     statements = re.split(multi_stmt_pattern, sql, flags=re.IGNORECASE)
-    
+
     if statements:
         sql = statements[0].strip()
-    
+
     # Remove trailing semicolon
     if sql.endswith(";"):
         sql = sql[:-1]
-    
+
     return sql
 
 

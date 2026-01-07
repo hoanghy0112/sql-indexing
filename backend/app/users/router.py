@@ -5,14 +5,13 @@ API endpoints for user management.
 """
 
 from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlmodel import select
 
 from app.auth.dependencies import CurrentUser, DBSession
-from app.auth.schemas import UserResponse, MessageResponse
+from app.auth.schemas import MessageResponse, UserResponse
 from app.auth.service import get_password_hash, verify_password
 from app.users.models import User
-from pydantic import BaseModel, Field
-
 
 router = APIRouter()
 

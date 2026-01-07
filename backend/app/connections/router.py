@@ -11,7 +11,11 @@ from sqlmodel import select
 
 from app.auth.dependencies import CurrentUser, DBSession
 from app.auth.schemas import MessageResponse
-from app.connections.models import ConnectionShare, ConnectionStatus, DatabaseConnection, SharePermission
+from app.connections.models import (
+    ConnectionShare,
+    ConnectionStatus,
+    SharePermission,
+)
 from app.connections.schemas import (
     ConnectionCreate,
     ConnectionFromURL,
@@ -25,8 +29,8 @@ from app.connections.schemas import (
 )
 from app.connections.service import (
     create_connection,
-    delete_connection,
     decrypt_password,
+    delete_connection,
     get_connection_by_id,
     get_user_connections,
     parse_connection_url,
@@ -131,7 +135,7 @@ async def add_connection_from_url(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid connection URL: {e}",
-        )
+        ) from e
 
     # Test connection
     success, message, _ = await test_connection(
@@ -255,12 +259,12 @@ async def update_connection(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Connection not found",
         )
-    
+
     connection = await get_connection_by_id(session, connection_id)
     # Only original owner or shared users with owner permission can update
     is_original_owner = connection.owner_id == current_user.id
     has_owner_permission = permission == SharePermission.OWNER
-    
+
     if not is_original_owner and not has_owner_permission:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -363,12 +367,12 @@ async def reanalyze_connection(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Connection not found",
         )
-    
+
     connection = await get_connection_by_id(session, connection_id)
     # Only original owner or shared users with owner permission can reanalyze
     is_original_owner = connection.owner_id == current_user.id
     has_owner_permission = permission == SharePermission.OWNER
-    
+
     if not is_original_owner and not has_owner_permission:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

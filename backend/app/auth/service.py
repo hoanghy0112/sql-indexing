@@ -4,15 +4,15 @@ Authentication Service
 Handles password hashing, JWT token generation, and user authentication.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from app.config import get_settings
 from app.auth.schemas import TokenData
+from app.config import get_settings
 from app.users.models import User
 
 settings = get_settings()
@@ -36,9 +36,9 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     to_encode = data.copy()
 
     if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
+        expire = datetime.now(UTC) + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
+        expire = datetime.now(UTC) + timedelta(minutes=settings.jwt_expire_minutes)
 
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.jwt_secret, algorithm=settings.jwt_algorithm)

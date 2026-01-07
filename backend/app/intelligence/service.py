@@ -22,10 +22,10 @@ from app.connections.models import (
     IndexingStrategy,
     TableInsight,
 )
-from app.connections.service import decrypt_password, update_connection_status
+from app.connections.service import decrypt_password
 from app.database import get_session_context
 from app.intelligence.extractor import (
-    DatabaseMetadata,
+    ColumnInfo,
     TableInfo,
     extract_metadata,
     table_to_document,
@@ -90,11 +90,10 @@ async def save_table_insight(
 async def save_column_metadata(
     session: AsyncSession,
     table_insight_id: int,
-    column: "ColumnInfo",
+    column: ColumnInfo,
     strategy: IndexingStrategy,
 ) -> ColumnMetadata:
     """Save column metadata to database."""
-    from app.intelligence.extractor import ColumnInfo
 
     # Check if exists
     stmt = select(ColumnMetadata).where(

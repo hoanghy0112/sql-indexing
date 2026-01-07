@@ -5,6 +5,7 @@ Business logic for managing external database connections.
 """
 
 import asyncio
+import base64
 from urllib.parse import urlparse
 
 import asyncpg
@@ -24,7 +25,6 @@ from app.users.models import User
 settings = get_settings()
 
 # In production, use a proper key management system
-import base64
 
 # Derive stable key from JWT_SECRET
 # Ensure 32 bytes and URL-safe base64 encoding

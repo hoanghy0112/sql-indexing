@@ -5,7 +5,6 @@ Handles embedding generation and vector storage in Qdrant.
 """
 
 import hashlib
-import uuid
 from typing import Any
 
 from qdrant_client import QdrantClient
@@ -65,15 +64,15 @@ async def ensure_collection_exists() -> None:
         # Check if dimensions match
         model = get_embedding_model()
         embedding_dim = model.get_sentence_embedding_dimension()
-        
+
         collection_info = client.get_collection(collection_name)
         current_dim = collection_info.config.params.vectors.size
-        
+
         if current_dim != embedding_dim:
             # Dimension mismatch - recreate collection
             print(f"Dimension mismatch (current: {current_dim}, new: {embedding_dim}). Recreating collection...")
             client.delete_collection(collection_name)
-            
+
             client.create_collection(
                 collection_name=collection_name,
                 vectors_config=models.VectorParams(

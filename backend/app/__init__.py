@@ -1,9 +1,9 @@
 """App module - import models here to ensure they're registered."""
-from app.users.models import User
+from app.agent.models import ChatMessage, ChatSession, SQLHistory
 from app.connections.models import (
-    DatabaseConnection,
-    ConnectionShare,
-    TableInsight,
     ColumnMetadata,
+    ConnectionShare,
+    DatabaseConnection,
+    TableInsight,
 )
-from app.agent.models import ChatSession, ChatMessage, SQLHistory
+from app.users.models import User

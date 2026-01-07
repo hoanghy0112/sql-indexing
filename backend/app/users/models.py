@@ -4,13 +4,13 @@ User Models
 SQLModel entities for user management.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
-    from app.connections.models import DatabaseConnection, ConnectionShare
+    from app.connections.models import ConnectionShare, DatabaseConnection
 
 
 class User(SQLModel, table=True):

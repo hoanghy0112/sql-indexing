@@ -5,7 +5,6 @@ Extracts schema information, statistics, and metadata from PostgreSQL databases.
 """
 
 import asyncio
-import json
 from dataclasses import dataclass, field
 
 import asyncpg
@@ -96,7 +95,7 @@ async def get_tables(conn: asyncpg.Connection, schema: str = "public") -> list[d
 async def get_columns(conn: asyncpg.Connection, schema: str, table: str) -> list[dict]:
     """Get column information for a table."""
     query = """
-        SELECT 
+        SELECT
             column_name,
             data_type,
             is_nullable,
@@ -192,7 +191,7 @@ async def get_column_stats(
     """
     # Get distinct count and null count
     stats_query = f"""
-        SELECT 
+        SELECT
             COUNT(DISTINCT "{column}") as distinct_count,
             COUNT(*) FILTER (WHERE "{column}" IS NULL) as null_count
         FROM "{schema}"."{table}"
@@ -341,10 +340,10 @@ def table_to_document(table: TableInfo) -> str:
     """Convert table info to a text document for vectorization."""
     lines = [
         f"# Table: {table.schema_name}.{table.table_name}",
-        f"",
+        "",
         f"Row count: {table.row_count:,}",
-        f"",
-        f"## Columns",
+        "",
+        "## Columns",
     ]
 
     for col in table.columns:

@@ -595,7 +595,7 @@ export default function DatabasePage() {
                                         <h3 className="text-lg font-medium mb-2">Start a conversation</h3>
                                         <p className="text-muted-foreground max-w-md">
                                             Ask questions about your data in natural language.
-                                            I'll translate them to SQL and fetch the results.
+                                            I&apos;ll translate them to SQL and fetch the results.
                                         </p>
                                     </div>
                                 ) : (
