@@ -155,7 +155,7 @@ async def generate_node(state: AgentState) -> AgentState:
     context = "\n\n".join(context_parts)
 
     # Generate SQL
-    sql_prompt = f"""You are a PostgreSQL expert. Generate a SQL query to answer this question.
+    sql_prompt = f"""You are a PostgreSQL expert. Generate a SINGLE SQL query to answer this question.
 
 Question: {question}
 
@@ -167,7 +167,10 @@ Rules:
 2. Use proper PostgreSQL syntax
 3. Limit results to 100 rows unless specifically asked for more
 4. Use double quotes for column/table names if they have special characters
-5. Return ONLY the SQL query, no explanation
+5. Return ONLY ONE SQL query - no multiple statements
+6. Do NOT include multiple queries separated by semicolons
+7. If you need to combine data, use JOINs, subqueries, or CTEs in a single statement
+8. No explanation, just the query
 
 SQL:
 """
@@ -236,29 +239,43 @@ SQL:
 
 
 def extract_sql(text: str) -> str | None:
-    """Extract SQL query from LLM response."""
+    """Extract SQL query from LLM response. Only returns the first statement if multiple exist."""
+    sql = None
+    
     # Try to find SQL in code blocks
     code_block_match = re.search(r"```(?:sql)?\s*(.*?)```", text, re.DOTALL | re.IGNORECASE)
     if code_block_match:
-        return code_block_match.group(1).strip()
-
-    # Try to find SELECT statement
-    select_match = re.search(
-        r"(SELECT\s+.*?(?:;|$))",
-        text,
-        re.DOTALL | re.IGNORECASE,
-    )
-    if select_match:
-        sql = select_match.group(1).strip()
-        if sql.endswith(";"):
-            sql = sql[:-1]
-        return sql
-
-    # If text looks like SQL, return it
-    if text.strip().upper().startswith("SELECT"):
-        return text.strip()
-
-    return None
+        sql = code_block_match.group(1).strip()
+    else:
+        # Try to find SELECT statement
+        select_match = re.search(
+            r"(SELECT\s+.*?(?:;|$))",
+            text,
+            re.DOTALL | re.IGNORECASE,
+        )
+        if select_match:
+            sql = select_match.group(1).strip()
+        elif text.strip().upper().startswith("SELECT"):
+            sql = text.strip()
+    
+    if not sql:
+        return None
+    
+    # Handle multiple statements - only take the first one
+    # Split by semicolons followed by whitespace and a new statement keyword
+    # This is tricky because semicolons can appear inside strings
+    # Simple approach: split by semicolon followed by newline and SELECT/WITH/INSERT/UPDATE/DELETE
+    multi_stmt_pattern = r";\s*(?=\n\s*(?:SELECT|WITH|INSERT|UPDATE|DELETE))"
+    statements = re.split(multi_stmt_pattern, sql, flags=re.IGNORECASE)
+    
+    if statements:
+        sql = statements[0].strip()
+    
+    # Remove trailing semicolon
+    if sql.endswith(";"):
+        sql = sql[:-1]
+    
+    return sql
 
 
 async def generate_explanation(

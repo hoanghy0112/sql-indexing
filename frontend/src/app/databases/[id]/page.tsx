@@ -15,7 +15,7 @@ import { cn, formatDateTime, formatNumber } from '@/lib/utils'
 import {
     ArrowLeft, Database, MessageSquare, Brain, Settings, Loader2,
     RefreshCw, Trash2, Share2, Send, CheckCircle2, AlertCircle,
-    Table2, Columns, Hash, FileText, Sparkles
+    Table2, Columns, Hash, FileText, Sparkles, Save
 } from 'lucide-react'
 
 export default function DatabasePage() {
@@ -36,6 +36,16 @@ export default function DatabasePage() {
         data?: any[]
         columns?: string[]
     }>>([])
+
+    // Settings form state
+    const [editName, setEditName] = useState('')
+    const [editDescription, setEditDescription] = useState('')
+    const [editHost, setEditHost] = useState('')
+    const [editPort, setEditPort] = useState(5432)
+    const [editDatabase, setEditDatabase] = useState('')
+    const [editUsername, setEditUsername] = useState('')
+    const [editPassword, setEditPassword] = useState('')
+    const [editSslMode, setEditSslMode] = useState('prefer')
 
     // Fetch connection details
     const { data: connection, isLoading } = useQuery({
@@ -135,6 +145,64 @@ export default function DatabasePage() {
         chatMutation.mutate(chatInput)
         setChatInput('')
     }
+
+    // Update connection settings mutation
+    const updateMutation = useMutation({
+        mutationFn: (data: {
+            name?: string
+            description?: string
+            host?: string
+            port?: number
+            database?: string
+            username?: string
+            password?: string
+            ssl_mode?: string
+        }) => connectionsApi.update(connectionId, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['connection', connectionId] })
+            toast({ title: 'Connection updated', description: 'Settings saved successfully' })
+            setEditPassword('') // Clear password after save
+        },
+        onError: (error: any) => {
+            toast({
+                title: 'Failed to update connection',
+                description: error.response?.data?.detail || 'An error occurred',
+                variant: 'destructive',
+            })
+        },
+    })
+
+    const handleSaveSettings = () => {
+        const updateData: Record<string, any> = {}
+        if (editName !== connection?.name) updateData.name = editName
+        if (editDescription !== (connection?.description || '')) updateData.description = editDescription
+        if (editHost !== connection?.host) updateData.host = editHost
+        if (editPort !== connection?.port) updateData.port = editPort
+        if (editDatabase !== connection?.database) updateData.database = editDatabase
+        if (editUsername !== connection?.username) updateData.username = editUsername
+        if (editPassword) updateData.password = editPassword
+        if (editSslMode !== connection?.ssl_mode) updateData.ssl_mode = editSslMode
+
+        if (Object.keys(updateData).length === 0) {
+            toast({ title: 'No changes', description: 'No settings were changed' })
+            return
+        }
+
+        updateMutation.mutate(updateData)
+    }
+
+    // Initialize form state from connection data
+    useEffect(() => {
+        if (connection) {
+            setEditName(connection.name || '')
+            setEditDescription(connection.description || '')
+            setEditHost(connection.host || '')
+            setEditPort(connection.port || 5432)
+            setEditDatabase(connection.database || '')
+            setEditUsername(connection.username || '')
+            setEditSslMode(connection.ssl_mode || 'prefer')
+        }
+    }, [connection])
 
     useEffect(() => {
         if (!isAuthenticated) {
@@ -500,19 +568,105 @@ export default function DatabasePage() {
                                 <CardHeader>
                                     <CardTitle>Connection Settings</CardTitle>
                                     <CardDescription>
-                                        Manage your database connection
+                                        Update your database connection details
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="name">Connection Name</Label>
+                                        <Input
+                                            id="name"
+                                            value={editName}
+                                            onChange={(e) => setEditName(e.target.value)}
+                                            placeholder="My Database"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="description">Description</Label>
+                                        <Input
+                                            id="description"
+                                            value={editDescription}
+                                            onChange={(e) => setEditDescription(e.target.value)}
+                                            placeholder="Optional description"
+                                        />
+                                    </div>
                                     <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <Label>Host</Label>
-                                            <Input value={connection.host} readOnly className="mt-1" />
+                                        <div className="space-y-2">
+                                            <Label htmlFor="host">Host</Label>
+                                            <Input
+                                                id="host"
+                                                value={editHost}
+                                                onChange={(e) => setEditHost(e.target.value)}
+                                                placeholder="localhost"
+                                            />
                                         </div>
-                                        <div>
-                                            <Label>Port</Label>
-                                            <Input value={connection.port} readOnly className="mt-1" />
+                                        <div className="space-y-2">
+                                            <Label htmlFor="port">Port</Label>
+                                            <Input
+                                                id="port"
+                                                type="number"
+                                                value={editPort}
+                                                onChange={(e) => setEditPort(parseInt(e.target.value) || 5432)}
+                                                placeholder="5432"
+                                            />
                                         </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="database">Database</Label>
+                                        <Input
+                                            id="database"
+                                            value={editDatabase}
+                                            onChange={(e) => setEditDatabase(e.target.value)}
+                                            placeholder="my_database"
+                                        />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="username">Username</Label>
+                                            <Input
+                                                id="username"
+                                                value={editUsername}
+                                                onChange={(e) => setEditUsername(e.target.value)}
+                                                placeholder="postgres"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="password">Password</Label>
+                                            <Input
+                                                id="password"
+                                                type="password"
+                                                value={editPassword}
+                                                onChange={(e) => setEditPassword(e.target.value)}
+                                                placeholder="Leave blank to keep current"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="ssl_mode">SSL Mode</Label>
+                                        <select
+                                            id="ssl_mode"
+                                            value={editSslMode}
+                                            onChange={(e) => setEditSslMode(e.target.value)}
+                                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                        >
+                                            <option value="disable">Disable</option>
+                                            <option value="prefer">Prefer</option>
+                                            <option value="require">Require</option>
+                                        </select>
+                                    </div>
+                                    <div className="pt-4">
+                                        <Button
+                                            onClick={handleSaveSettings}
+                                            disabled={updateMutation.isPending}
+                                            className="w-full"
+                                        >
+                                            {updateMutation.isPending ? (
+                                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                            ) : (
+                                                <Save className="h-4 w-4 mr-2" />
+                                            )}
+                                            Save Changes
+                                        </Button>
                                     </div>
                                 </CardContent>
                             </Card>
