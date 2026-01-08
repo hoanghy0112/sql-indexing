@@ -27,6 +27,7 @@ from app.database import get_session_context
 from app.intelligence.extractor import (
     ColumnInfo,
     TableInfo,
+    _generate_column_summary,
     extract_metadata,
     table_to_document,
 )
@@ -92,8 +93,11 @@ async def save_column_metadata(
     table_insight_id: int,
     column: ColumnInfo,
     strategy: IndexingStrategy,
+    table_name: str,
 ) -> ColumnMetadata:
     """Save column metadata to database."""
+    # Generate column summary
+    column_summary = _generate_column_summary(column, table_name)
 
     # Check if exists
     stmt = select(ColumnMetadata).where(
@@ -119,6 +123,7 @@ async def save_column_metadata(
         metadata.sample_values = (
             json.dumps(column.sample_values) if column.sample_values else None
         )
+        metadata.column_summary = column_summary
     else:
         # Create
         metadata = ColumnMetadata(
@@ -136,6 +141,7 @@ async def save_column_metadata(
                 json.dumps(column.categorical_values) if column.categorical_values else None
             ),
             sample_values=json.dumps(column.sample_values) if column.sample_values else None,
+            column_summary=column_summary,
         )
         session.add(metadata)
 
@@ -255,7 +261,9 @@ async def analyze_database(connection_id: int) -> None:
 
                         strategy = determine_indexing_strategy_rule_based(column)
 
-                    await save_column_metadata(session, insight.id, column, strategy)
+                    await save_column_metadata(
+                        session, insight.id, column, strategy, table.table_name
+                    )
 
             # Complete
             connection.status = ConnectionStatus.READY
@@ -313,6 +321,7 @@ async def get_connection_insights(
                             if col.categorical_values
                             else None
                         ),
+                        "column_summary": col.column_summary,
                     }
                     for col in columns
                 ],

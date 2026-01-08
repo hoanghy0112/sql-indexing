@@ -15,7 +15,8 @@ import { cn, formatDateTime, formatNumber } from '@/lib/utils'
 import {
     ArrowLeft, Database, MessageSquare, Brain, Settings, Loader2,
     RefreshCw, Trash2, Share2, Send, CheckCircle2, AlertCircle,
-    Table2, Columns, Hash, FileText, Sparkles, Save, UserPlus, X, Copy, Link
+    Table2, Columns, Hash, FileText, Sparkles, Save, UserPlus, X, Copy, Link,
+    ChevronDown, ChevronUp, Edit2
 } from 'lucide-react'
 import {
     Dialog,
@@ -67,6 +68,11 @@ export default function DatabasePage() {
     const [chatShareInfo, setChatShareInfo] = useState<{ is_public: boolean; share_url: string | null } | null>(null)
     const [isChatShareDialogOpen, setIsChatShareDialogOpen] = useState(false)
 
+    // Insight editing state
+    const [expandedInsight, setExpandedInsight] = useState<number | null>(null)
+    const [editingInsight, setEditingInsight] = useState<number | null>(null)
+    const [editDocument, setEditDocument] = useState('')
+
     // Fetch connection details
     const { data: connection, isLoading } = useQuery({
         queryKey: ['connection', connectionId],
@@ -109,6 +115,25 @@ export default function DatabasePage() {
             toast({
                 title: 'Failed to start re-analysis',
                 description: error.response?.data?.detail,
+                variant: 'destructive',
+            })
+        },
+    })
+
+    // Update insight mutation
+    const updateInsightMutation = useMutation({
+        mutationFn: ({ insightId, data }: { insightId: number; data: { insight_document?: string } }) =>
+            intelligenceApi.updateInsight(connectionId, insightId, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['insights', connectionId] })
+            toast({ title: 'Insight updated', description: 'Your changes have been saved' })
+            setEditingInsight(null)
+            setEditDocument('')
+        },
+        onError: (error: any) => {
+            toast({
+                title: 'Failed to update insight',
+                description: error.response?.data?.detail || 'An error occurred',
                 variant: 'destructive',
             })
         },
@@ -673,7 +698,7 @@ export default function DatabasePage() {
                                 <div>
                                     <h3 className="text-lg font-medium">Database Insights</h3>
                                     <p className="text-muted-foreground">
-                                        AI-generated insights about your database schema
+                                        AI-generated insights about your database schema. Click on a table to view details.
                                     </p>
                                 </div>
                                 <Button
@@ -690,48 +715,158 @@ export default function DatabasePage() {
                                 </Button>
                             </div>
 
-                            <div className="grid gap-4 md:grid-cols-2">
-                                {insights?.map((insight: any) => (
-                                    <Card key={insight.id}>
-                                        <CardHeader className="pb-3">
-                                            <div className="flex items-center space-x-2">
-                                                <Table2 className="h-4 w-4 text-primary" />
-                                                <CardTitle className="text-base">
-                                                    {insight.schema_name}.{insight.table_name}
-                                                </CardTitle>
-                                            </div>
-                                            <CardDescription>
-                                                {formatNumber(insight.row_count)} rows • {insight.columns.length} columns
-                                            </CardDescription>
-                                        </CardHeader>
-                                        <CardContent>
-                                            <div className="space-y-2">
-                                                {insight.columns.slice(0, 5).map((col: any) => (
-                                                    <div key={col.name} className="flex items-center justify-between text-sm">
-                                                        <div className="flex items-center space-x-2">
-                                                            <Columns className="h-3 w-3 text-muted-foreground" />
-                                                            <span>{col.name}</span>
-                                                            <span className="text-xs text-muted-foreground">({col.data_type})</span>
-                                                        </div>
-                                                        <span className={cn(
-                                                            'text-xs px-2 py-0.5 rounded',
-                                                            col.indexing_strategy === 'categorical' ? 'bg-green-500/10 text-green-500' :
-                                                                col.indexing_strategy === 'vector' ? 'bg-purple-500/10 text-purple-500' :
-                                                                    'bg-muted text-muted-foreground'
-                                                        )}>
-                                                            {col.indexing_strategy}
-                                                        </span>
+                            <div className="space-y-4">
+                                {insights?.map((insight: any) => {
+                                    const isExpanded = expandedInsight === insight.id
+                                    const isEditing = editingInsight === insight.id
+
+                                    return (
+                                        <Card key={insight.id} className="overflow-hidden">
+                                            <CardHeader
+                                                className="pb-3 cursor-pointer hover:bg-muted/50 transition-colors"
+                                                onClick={() => {
+                                                    if (isExpanded) {
+                                                        setExpandedInsight(null)
+                                                        setEditingInsight(null)
+                                                    } else {
+                                                        setExpandedInsight(insight.id)
+                                                    }
+                                                }}
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center space-x-2">
+                                                        <Table2 className="h-4 w-4 text-primary" />
+                                                        <CardTitle className="text-base">
+                                                            {insight.schema_name}.{insight.table_name}
+                                                        </CardTitle>
                                                     </div>
-                                                ))}
-                                                {insight.columns.length > 5 && (
-                                                    <p className="text-xs text-muted-foreground">
-                                                        +{insight.columns.length - 5} more columns
-                                                    </p>
-                                                )}
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                ))}
+                                                    <div className="flex items-center space-x-2">
+                                                        <span className="text-sm text-muted-foreground">
+                                                            {formatNumber(insight.row_count)} rows • {insight.columns.length} columns
+                                                        </span>
+                                                        {isExpanded ? (
+                                                            <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                                                        ) : (
+                                                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </CardHeader>
+
+                                            {isExpanded && (
+                                                <CardContent className="border-t pt-4 space-y-4">
+                                                    {/* Insight Document Section */}
+                                                    <div className="space-y-2">
+                                                        <div className="flex items-center justify-between">
+                                                            <Label className="text-sm font-medium">Insight Document</Label>
+                                                            {!isEditing ? (
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation()
+                                                                        setEditingInsight(insight.id)
+                                                                        setEditDocument(insight.insight_document || '')
+                                                                    }}
+                                                                >
+                                                                    <Edit2 className="h-3 w-3 mr-1" />
+                                                                    Edit
+                                                                </Button>
+                                                            ) : (
+                                                                <div className="flex space-x-2">
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="sm"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation()
+                                                                            setEditingInsight(null)
+                                                                            setEditDocument('')
+                                                                        }}
+                                                                    >
+                                                                        Cancel
+                                                                    </Button>
+                                                                    <Button
+                                                                        size="sm"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation()
+                                                                            updateInsightMutation.mutate({
+                                                                                insightId: insight.id,
+                                                                                data: { insight_document: editDocument }
+                                                                            })
+                                                                        }}
+                                                                        disabled={updateInsightMutation.isPending}
+                                                                    >
+                                                                        {updateInsightMutation.isPending ? (
+                                                                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                                                        ) : (
+                                                                            <Save className="h-3 w-3 mr-1" />
+                                                                        )}
+                                                                        Save
+                                                                    </Button>
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        {isEditing ? (
+                                                            <textarea
+                                                                className="w-full min-h-[300px] p-3 rounded-md border border-input bg-background text-sm font-mono resize-y"
+                                                                value={editDocument}
+                                                                onChange={(e) => setEditDocument(e.target.value)}
+                                                                onClick={(e) => e.stopPropagation()}
+                                                            />
+                                                        ) : (
+                                                            <div className="bg-muted/50 rounded-md p-4 max-h-[400px] overflow-auto">
+                                                                <pre className="text-sm whitespace-pre-wrap font-mono">
+                                                                    {insight.insight_document || 'No document generated yet.'}
+                                                                </pre>
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Columns Section */}
+                                                    <div className="space-y-2">
+                                                        <Label className="text-sm font-medium">Columns</Label>
+                                                        <div className="space-y-2">
+                                                            {insight.columns.map((col: any) => (
+                                                                <div
+                                                                    key={col.name}
+                                                                    className="p-3 rounded-md bg-muted/30 space-y-1"
+                                                                >
+                                                                    <div className="flex items-center justify-between">
+                                                                        <div className="flex items-center space-x-2">
+                                                                            <Columns className="h-3 w-3 text-muted-foreground" />
+                                                                            <span className="font-medium">{col.name}</span>
+                                                                            <span className="text-xs text-muted-foreground">({col.data_type})</span>
+                                                                            {col.is_primary_key && (
+                                                                                <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-600">PK</span>
+                                                                            )}
+                                                                            {col.is_foreign_key && (
+                                                                                <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500">FK</span>
+                                                                            )}
+                                                                        </div>
+                                                                        <span className={cn(
+                                                                            'text-xs px-2 py-0.5 rounded',
+                                                                            col.indexing_strategy === 'categorical' ? 'bg-green-500/10 text-green-500' :
+                                                                                col.indexing_strategy === 'vector' ? 'bg-purple-500/10 text-purple-500' :
+                                                                                    'bg-muted text-muted-foreground'
+                                                                        )}>
+                                                                            {col.indexing_strategy}
+                                                                        </span>
+                                                                    </div>
+                                                                    {col.column_summary && (
+                                                                        <p className="text-sm text-muted-foreground pl-5">
+                                                                            {col.column_summary}
+                                                                        </p>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </CardContent>
+                                            )}
+                                        </Card>
+                                    )
+                                })}
                             </div>
                         </div>
                     </TabsContent>

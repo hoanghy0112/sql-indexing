@@ -81,6 +81,7 @@ erDiagram
         IndexingStrategy indexing_strategy
         string categorical_values
         string sample_values
+        string column_summary
     }
 
     ChatSession {
@@ -256,6 +257,7 @@ Stores analyzed column information.
 | `indexing_strategy` | VARCHAR(20) | DEFAULT 'skip' | IndexingStrategy enum |
 | `categorical_values` | TEXT | NULL | JSON array of values |
 | `sample_values` | TEXT | NULL | JSON array of samples |
+| `column_summary` | TEXT | NULL | AI-generated summary describing the column |
 
 ### chat_sessions
 

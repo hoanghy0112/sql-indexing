@@ -151,5 +151,8 @@ class ColumnMetadata(SQLModel, table=True):
     # For VECTOR columns: sample values
     sample_values: str | None = Field(default=None)  # JSON array
 
+    # AI-generated summary for this column
+    column_summary: str | None = Field(default=None)
+
     # Relationships
     table_insight: TableInsight = Relationship(back_populates="columns")

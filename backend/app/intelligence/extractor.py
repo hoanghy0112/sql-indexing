@@ -337,39 +337,155 @@ async def extract_metadata(
 
 
 def table_to_document(table: TableInfo) -> str:
-    """Convert table info to a text document for vectorization."""
+    """Convert table info to a comprehensive text document for vectorization."""
+    # Infer table purpose from name
+    table_purpose = _infer_table_purpose(table.table_name, table.columns)
+
     lines = [
         f"# Table: {table.schema_name}.{table.table_name}",
         "",
-        f"Row count: {table.row_count:,}",
+        "## Purpose",
+        f"{table_purpose}",
         "",
-        "## Columns",
+        "## Content Overview",
+        f"- **Total Rows**: {table.row_count:,}",
+        f"- **Columns**: {len(table.columns)} columns",
     ]
 
-    for col in table.columns:
-        col_desc = [f"- **{col.name}** ({col.data_type})"]
+    # Add primary key info
+    pk_columns = [col.name for col in table.columns if col.is_primary_key]
+    if pk_columns:
+        lines.append(f"- **Primary Key**: {', '.join(pk_columns)}")
 
-        if col.is_primary_key:
-            col_desc.append("  - Primary Key")
-        if col.is_foreign_key:
-            col_desc.append(f"  - Foreign Key → {col.foreign_key_ref}")
-        if col.distinct_count is not None:
-            col_desc.append(f"  - Distinct values: {col.distinct_count:,}")
-        if col.categorical_values:
-            values_str = ", ".join(col.categorical_values[:20])
-            if len(col.categorical_values) > 20:
-                values_str += f"... (+{len(col.categorical_values) - 20} more)"
-            col_desc.append(f"  - Possible values: {values_str}")
-        if col.sample_values:
-            samples = ", ".join(col.sample_values[:5])
-            col_desc.append(f"  - Sample values: {samples}")
+    # Add relationship count
+    if table.foreign_keys:
+        lines.append(f"- **Relations**: {len(table.foreign_keys)} foreign key relationship(s)")
 
-        lines.extend(col_desc)
-
+    # Relationships section
     if table.foreign_keys:
         lines.append("")
         lines.append("## Relationships")
         for fk in table.foreign_keys:
-            lines.append(f"- {fk['column']} → {fk['references']}")
+            ref_parts = fk["references"].split(".")
+            ref_table = ref_parts[-2] if len(ref_parts) >= 2 else fk["references"]
+            lines.append(
+                f"- `{fk['column']}` → `{fk['references']}` "
+                f"(links to {ref_table} table)"
+            )
+
+    # Detailed column section
+    lines.append("")
+    lines.append("## Column Details")
+
+    for col in table.columns:
+        lines.append("")
+        lines.append(f"### {col.name} ({col.data_type})")
+
+        # Generate column summary
+        col_summary = _generate_column_summary(col, table.table_name)
+        lines.append(col_summary)
+
+        # Add statistics
+        if col.distinct_count is not None:
+            lines.append(f"- **Distinct Values**: {col.distinct_count:,}")
+        if col.null_count is not None and col.null_count > 0:
+            lines.append(f"- **Null Count**: {col.null_count:,}")
+        if col.categorical_values:
+            values_str = ", ".join(f"`{v}`" for v in col.categorical_values[:10])
+            if len(col.categorical_values) > 10:
+                values_str += f" ... (+{len(col.categorical_values) - 10} more)"
+            lines.append(f"- **Possible Values**: {values_str}")
+        if col.sample_values:
+            samples = ", ".join(f"`{v}`" for v in col.sample_values[:5])
+            lines.append(f"- **Sample Values**: {samples}")
 
     return "\n".join(lines)
+
+
+def _infer_table_purpose(table_name: str, columns: list[ColumnInfo]) -> str:
+    """Infer the purpose of a table based on its name and columns."""
+    name_lower = table_name.lower()
+
+    # Common table name patterns
+    if "user" in name_lower:
+        return "This table stores user account information and profiles."
+    if "order" in name_lower:
+        return "This table stores order records and transaction details."
+    if "product" in name_lower:
+        return "This table stores product catalog information."
+    if "log" in name_lower or "audit" in name_lower:
+        return "This table stores audit logs and activity tracking records."
+    if "config" in name_lower or "setting" in name_lower:
+        return "This table stores application configuration and settings."
+    if "session" in name_lower:
+        return "This table stores user session data."
+    if "message" in name_lower or "chat" in name_lower:
+        return "This table stores messages and communication records."
+    if "payment" in name_lower or "transaction" in name_lower:
+        return "This table stores payment and financial transaction records."
+    if "category" in name_lower or "type" in name_lower:
+        return "This table stores categorization and type classification data."
+    if "permission" in name_lower or "role" in name_lower:
+        return "This table stores access control and permission definitions."
+
+    # Check for junction table pattern (typically has multiple foreign keys)
+    fk_count = sum(1 for col in columns if col.is_foreign_key)
+    if fk_count >= 2 and len(columns) <= 5:
+        return "This is a junction table that establishes many-to-many relationships."
+
+    # Default description
+    return f"This table stores {table_name.replace('_', ' ')} data."
+
+
+def _generate_column_summary(col: ColumnInfo, table_name: str) -> str:
+    """Generate a descriptive summary for a column."""
+    parts = []
+
+    # Determine the data role
+    data_type_lower = col.data_type.lower()
+    name_lower = col.name.lower()
+
+    # Key information
+    if col.is_primary_key:
+        parts.append(f"This is the primary key that uniquely identifies each {table_name} record.")
+    elif col.is_foreign_key:
+        ref = col.foreign_key_ref or "another table"
+        parts.append(f"This is a foreign key that references `{ref}`.")
+    else:
+        # Infer purpose from name and type
+        if "id" in name_lower and not col.is_primary_key:
+            parts.append("This column stores an identifier reference.")
+        elif "name" in name_lower:
+            parts.append("This column stores a name or title value.")
+        elif "email" in name_lower:
+            parts.append("This column stores email addresses.")
+        elif "password" in name_lower or "hash" in name_lower:
+            parts.append("This column stores encrypted/hashed credential data.")
+        elif "date" in name_lower or "time" in name_lower or "timestamp" in data_type_lower:
+            parts.append("This column stores date/time information.")
+        elif "status" in name_lower or "state" in name_lower:
+            parts.append("This column stores status or state information.")
+        elif "count" in name_lower or "amount" in name_lower or "total" in name_lower:
+            parts.append("This column stores numeric quantity or amount values.")
+        elif "price" in name_lower or "cost" in name_lower:
+            parts.append("This column stores monetary/price values.")
+        elif "description" in name_lower or "content" in name_lower or "text" in name_lower:
+            parts.append("This column stores text content or descriptions.")
+        elif "url" in name_lower or "link" in name_lower:
+            parts.append("This column stores URL or link references.")
+        elif "flag" in name_lower or "is_" in name_lower or "has_" in name_lower:
+            parts.append("This is a boolean flag column.")
+        elif "created" in name_lower:
+            parts.append("This column stores the creation timestamp.")
+        elif "updated" in name_lower or "modified" in name_lower:
+            parts.append("This column stores the last modification timestamp.")
+        else:
+            parts.append(f"This column stores `{col.data_type}` data.")
+
+    # Nullability
+    if col.is_nullable:
+        parts.append("This field is optional (nullable).")
+    else:
+        parts.append("This field is required (not nullable).")
+
+    return " ".join(parts)

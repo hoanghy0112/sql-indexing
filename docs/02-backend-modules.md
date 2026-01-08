@@ -348,6 +348,7 @@ class ColumnMetadata(SQLModel, table=True):
     indexing_strategy: IndexingStrategy
     categorical_values: str | None  # JSON array
     sample_values: str | None       # JSON array
+    column_summary: str | None      # AI-generated description
 ```
 
 #### IndexingStrategy Enum
@@ -396,7 +397,14 @@ async def extract_metadata(
 ) -> DatabaseMetadata
 
 def table_to_document(table: TableInfo) -> str
-    # Generates text document for vectorization
+    # Generates comprehensive text document for vectorization
+    # Includes: purpose, content overview, relationships, column details
+
+def _infer_table_purpose(table_name: str, columns: list[ColumnInfo]) -> str
+    # Infers table purpose from name patterns (users, orders, products, etc.)
+
+def _generate_column_summary(col: ColumnInfo, table_name: str) -> str
+    # Generates descriptive summary for a column based on name/type patterns
 ```
 
 ### Indexer (indexer.py)
