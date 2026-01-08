@@ -14,7 +14,8 @@ from langchain_core.pydantic_v1 import Field as LangchainField
 from langchain_core.tools import StructuredTool
 
 from app.config import get_settings
-from app.intelligence.vectorizer import search_similar
+from app.database import get_session_context
+from app.intelligence.vectorizer import embed_text, search_similar
 
 settings = get_settings()
 
@@ -32,6 +33,26 @@ class ExecuteSQLInput(LangchainBaseModel):
 
     sql: str = LangchainField(description="The SQL query to execute")
     connection_id: int = LangchainField(description="The database connection ID")
+
+
+class GetTableInsightsInput(LangchainBaseModel):
+    """Input schema for get_table_insights tool."""
+
+    connection_id: int = LangchainField(description="The database connection ID")
+    table_names: list[str] = LangchainField(
+        description="List of table names to get insights for"
+    )
+
+
+class SearchByIndexInput(LangchainBaseModel):
+    """Input schema for search_by_index tool."""
+
+    connection_id: int = LangchainField(description="The database connection ID")
+    table_name: str = LangchainField(description="The table name to search in")
+    column_name: str = LangchainField(description="The column name to search")
+    search_term: str = LangchainField(
+        description="The term to search for (can be synonym or approximate value)"
+    )
 
 
 # Store connection details in memory for tool execution
@@ -98,6 +119,296 @@ async def search_database_data(
             "message": f"Search failed: {str(e)}",
             "results": [],
         })
+
+
+async def get_table_insights(
+    connection_id: int,
+    table_names: list[str],
+) -> str:
+    """
+    Get detailed insights for specified tables from the database.
+
+    This tool fetches rich metadata about tables including:
+    - Table summary and purpose
+    - Column information (type, nullability, keys)
+    - Categorical values for low-cardinality columns
+    - Sample values for high-cardinality columns
+    - AI-generated column descriptions
+
+    Use this BEFORE generating SQL to understand the exact column names,
+    data types, and available values.
+
+    Returns:
+        JSON string with detailed table and column metadata.
+    """
+    # Import here to avoid circular dependency
+    from app.connections.models import ColumnMetadata, TableInsight
+
+    try:
+        async with get_session_context() as session:
+            from sqlmodel import select
+
+            # Fetch table insights
+            stmt = select(TableInsight).where(
+                TableInsight.connection_id == connection_id,
+                TableInsight.table_name.in_(table_names),
+            )
+            result = await session.execute(stmt)
+            table_insights = result.scalars().all()
+
+            if not table_insights:
+                return json.dumps({
+                    "status": "no_results",
+                    "message": f"No insights found for tables: {table_names}",
+                    "tables": [],
+                })
+
+            tables_data = []
+            for table in table_insights:
+                # Fetch columns for this table
+                col_stmt = select(ColumnMetadata).where(
+                    ColumnMetadata.table_insight_id == table.id
+                )
+                col_result = await session.execute(col_stmt)
+                columns = col_result.scalars().all()
+
+                columns_data = []
+                for col in columns:
+                    col_info = {
+                        "column_name": col.column_name,
+                        "data_type": col.data_type,
+                        "is_nullable": col.is_nullable,
+                        "is_primary_key": col.is_primary_key,
+                        "is_foreign_key": col.is_foreign_key,
+                        "foreign_key_ref": col.foreign_key_ref,
+                        "indexing_strategy": col.indexing_strategy.value if col.indexing_strategy else None,
+                        "distinct_count": col.distinct_count,
+                        "column_summary": col.column_summary,
+                    }
+
+                    # Include categorical values for agent to know exact options
+                    if col.categorical_values:
+                        try:
+                            col_info["categorical_values"] = json.loads(col.categorical_values)
+                        except json.JSONDecodeError:
+                            col_info["categorical_values"] = None
+
+                    # Include sample values for reference
+                    if col.sample_values:
+                        try:
+                            col_info["sample_values"] = json.loads(col.sample_values)[:10]
+                        except json.JSONDecodeError:
+                            col_info["sample_values"] = None
+
+                    columns_data.append(col_info)
+
+                tables_data.append({
+                    "table_name": table.table_name,
+                    "schema_name": table.schema_name,
+                    "row_count": table.row_count,
+                    "summary": table.summary,
+                    "columns": columns_data,
+                })
+
+            return json.dumps({
+                "status": "success",
+                "message": f"Found insights for {len(tables_data)} tables",
+                "tables": tables_data,
+            })
+
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Failed to get table insights: {str(e)}",
+            "tables": [],
+        })
+
+
+async def search_by_index(
+    connection_id: int,
+    table_name: str,
+    column_name: str,
+    search_term: str,
+    limit: int = 10,
+) -> str:
+    """
+    Search for actual data values using categorical or vector indexes.
+
+    Use this tool when:
+    - User mentions a value that might be a synonym (e.g., "NYC" for "New York")
+    - User uses approximate terms that need to be resolved to actual values
+    - You need to find the exact value to use in a WHERE clause
+
+    For CATEGORICAL columns: Searches through stored categorical values
+    For VECTOR columns: Uses semantic similarity on sample values
+
+    Returns:
+        JSON with matching values and similarity scores.
+    """
+    from app.connections.models import ColumnMetadata, IndexingStrategy, TableInsight
+
+    try:
+        async with get_session_context() as session:
+            from sqlmodel import select
+
+            # Find the table insight
+            stmt = select(TableInsight).where(
+                TableInsight.connection_id == connection_id,
+                TableInsight.table_name == table_name,
+            )
+            result = await session.execute(stmt)
+            table_insight = result.scalar_one_or_none()
+
+            if not table_insight:
+                return json.dumps({
+                    "status": "error",
+                    "message": f"Table '{table_name}' not found",
+                    "matches": [],
+                })
+
+            # Find the column metadata
+            col_stmt = select(ColumnMetadata).where(
+                ColumnMetadata.table_insight_id == table_insight.id,
+                ColumnMetadata.column_name == column_name,
+            )
+            col_result = await session.execute(col_stmt)
+            column = col_result.scalar_one_or_none()
+
+            if not column:
+                return json.dumps({
+                    "status": "error",
+                    "message": f"Column '{column_name}' not found in table '{table_name}'",
+                    "matches": [],
+                })
+
+            matches = []
+            search_term_lower = search_term.lower()
+
+            if column.indexing_strategy == IndexingStrategy.CATEGORICAL:
+                # Search through categorical values
+                if column.categorical_values:
+                    try:
+                        values = json.loads(column.categorical_values)
+                        for value in values:
+                            if value is None:
+                                continue
+                            value_str = str(value).lower()
+                            # Fuzzy matching: check if search term is contained or similar
+                            if search_term_lower in value_str or value_str in search_term_lower:
+                                matches.append({
+                                    "value": value,
+                                    "match_type": "contains",
+                                    "score": 1.0,
+                                })
+                            elif _fuzzy_match(search_term_lower, value_str):
+                                matches.append({
+                                    "value": value,
+                                    "match_type": "fuzzy",
+                                    "score": 0.8,
+                                })
+                    except json.JSONDecodeError:
+                        pass
+
+            elif column.indexing_strategy == IndexingStrategy.VECTOR:
+                # Use vector similarity on sample values
+                if column.sample_values:
+                    try:
+                        values = json.loads(column.sample_values)
+                        # Generate embedding for search term
+                        search_embedding = await embed_text(search_term)
+
+                        # Compare with each sample value
+                        for value in values:
+                            if value is None:
+                                continue
+                            value_embedding = await embed_text(str(value))
+                            similarity = _cosine_similarity(search_embedding, value_embedding)
+
+                            if similarity > 0.5:  # Threshold for relevance
+                                matches.append({
+                                    "value": value,
+                                    "match_type": "semantic",
+                                    "score": round(similarity, 3),
+                                })
+                    except json.JSONDecodeError:
+                        pass
+
+            # Sort by score and limit
+            matches = sorted(matches, key=lambda x: x["score"], reverse=True)[:limit]
+
+            if not matches:
+                # Fallback: exact string search
+                return json.dumps({
+                    "status": "no_matches",
+                    "message": f"No matches found for '{search_term}' in {table_name}.{column_name}. "
+                               f"The column has indexing strategy: {column.indexing_strategy.value if column.indexing_strategy else 'none'}",
+                    "matches": [],
+                    "suggestion": "Try using the exact value or a different search term",
+                })
+
+            return json.dumps({
+                "status": "success",
+                "message": f"Found {len(matches)} matching values",
+                "matches": matches,
+                "column_info": {
+                    "indexing_strategy": column.indexing_strategy.value if column.indexing_strategy else None,
+                    "distinct_count": column.distinct_count,
+                },
+            })
+
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Search failed: {str(e)}",
+            "matches": [],
+        })
+
+
+def _fuzzy_match(s1: str, s2: str) -> bool:
+    """Simple fuzzy matching using common abbreviations and patterns."""
+    # Common abbreviations
+    abbreviations = {
+        "nyc": "new york",
+        "la": "los angeles",
+        "sf": "san francisco",
+        "usa": "united states",
+        "uk": "united kingdom",
+        "jr": "junior",
+        "sr": "senior",
+        "mgr": "manager",
+        "dept": "department",
+        "qty": "quantity",
+        "amt": "amount",
+    }
+
+    # Check if s1 is an abbreviation of s2
+    if s1 in abbreviations and abbreviations[s1] in s2:
+        return True
+    if s2 in abbreviations and abbreviations[s2] in s1:
+        return True
+
+    # Check Levenshtein-like similarity (simplified)
+    if len(s1) > 3 and len(s2) > 3:
+        # Check if they share a significant substring
+        for i in range(len(s1) - 2):
+            if s1[i:i+3] in s2:
+                return True
+
+    return False
+
+
+def _cosine_similarity(vec1: list[float], vec2: list[float]) -> float:
+    """Calculate cosine similarity between two vectors."""
+    import math
+
+    dot_product = sum(a * b for a, b in zip(vec1, vec2, strict=False))
+    norm1 = math.sqrt(sum(a * a for a in vec1))
+    norm2 = math.sqrt(sum(b * b for b in vec2))
+
+    if norm1 == 0 or norm2 == 0:
+        return 0.0
+
+    return dot_product / (norm1 * norm2)
 
 
 async def execute_sql_query(
@@ -256,4 +567,28 @@ search_database_tool = StructuredTool.from_function(
     Returns table names, schemas, and document summaries with relevance scores.
     """,
     args_schema=SearchDatabaseInput,
+)
+
+get_table_insights_tool = StructuredTool.from_function(
+    coroutine=get_table_insights,
+    name="get_table_insights",
+    description="""
+    Get detailed insights for specified tables including column metadata,
+    categorical values, sample values, and AI-generated summaries.
+    Use this AFTER finding relevant tables to get exact column names and available values.
+    This helps write accurate SQL queries.
+    """,
+    args_schema=GetTableInsightsInput,
+)
+
+search_by_index_tool = StructuredTool.from_function(
+    coroutine=search_by_index,
+    name="search_by_index",
+    description="""
+    Search for actual data values in a specific column using categorical or vector indexes.
+    Use this when the user mentions values that might be synonyms or abbreviations
+    (e.g., "NYC" for "New York City", "mgr" for "manager").
+    Returns matching values with similarity scores to use in WHERE clauses.
+    """,
+    args_schema=SearchByIndexInput,
 )

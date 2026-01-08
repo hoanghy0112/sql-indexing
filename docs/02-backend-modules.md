@@ -477,12 +477,16 @@ LangGraph-based multi-step agent for natural language database queries.
 graph LR
     A[User Question] --> B[Understand Node]
     B --> C[Retrieve Node]
-    C --> D[Generate Node]
-    D --> E[Response]
+    C --> D[Enrich Node]
+    D --> E[Search Values Node]
+    E --> F[Generate Node]
+    F -->|SQL Error| F
+    F --> G[Response]
 ```
 
 #### Understand Node
 - Parses user intent using LLM
+- Extracts searchable terms (values that might need resolution)
 - Identifies data requirements, filters, aggregations
 - Handles greetings specially
 
@@ -490,9 +494,21 @@ graph LR
 - Searches Qdrant for semantically similar tables
 - Returns relevant table schemas and documents
 
+#### Enrich Node
+- Calls `get_table_insights` to fetch detailed metadata
+- Gets column information, categorical values, sample values
+- Provides rich context for SQL generation
+
+#### Search Values Node
+- Uses `search_by_index` to resolve user terms to actual values
+- Handles synonyms (e.g., "NYC" → "New York City")
+- Matches abbreviations to full values
+
 #### Generate Node
-- Generates SQL query using LLM
+- Generates SQL query using LLM with enhanced context
+- Includes resolved values in the prompt
 - Executes query on user's database
+- **Retry logic**: On SQL syntax errors, retries up to 3 times with error context
 - Generates natural language explanation
 
 ### Agent State
@@ -505,8 +521,13 @@ class AgentState(TypedDict):
     
     # Intermediate
     intent: str | None
+    searchable_terms: list[dict] | None  # Terms to search for in indexes
     relevant_tables: list[dict] | None
+    table_insights: list[dict] | None    # Detailed table/column metadata
+    resolved_values: dict | None         # Mapping of user terms to actual values
     generated_sql: str | None
+    sql_attempts: int                    # Number of SQL generation attempts
+    last_sql_error: str | None           # Last SQL error for retry context
     
     # Output
     response: str | None
@@ -573,6 +594,46 @@ async def search_database_data(
     """
 ```
 
+#### get_table_insights
+```python
+async def get_table_insights(
+    connection_id: int,
+    table_names: list[str],
+) -> str:
+    """
+    Get detailed insights for specified tables from the database.
+    
+    Returns rich metadata including:
+    - Table summary and purpose
+    - Column information (type, nullability, keys)
+    - Categorical values for low-cardinality columns
+    - Sample values for high-cardinality columns
+    - AI-generated column descriptions
+    """
+```
+
+#### search_by_index
+```python
+async def search_by_index(
+    connection_id: int,
+    table_name: str,
+    column_name: str,
+    search_term: str,
+    limit: int = 10,
+) -> str:
+    """
+    Search for actual data values using categorical or vector indexes.
+    
+    Use cases:
+    - Resolve synonyms (e.g., "NYC" → "New York City")
+    - Match abbreviations to full values
+    - Find exact values for WHERE clauses
+    
+    For CATEGORICAL columns: Searches through stored categorical values
+    For VECTOR columns: Uses semantic similarity on sample values
+    """
+```
+
 #### execute_sql_query
 ```python
 async def execute_sql_query(
@@ -583,6 +644,7 @@ async def execute_sql_query(
     """
     Execute a SQL query on the user's database.
     Returns dict with columns, rows, and metadata.
+    Includes retry logic for connection issues.
     """
 ```
 
@@ -592,6 +654,15 @@ _connection_cache: dict[int, dict] = {}
 
 def set_connection_details(connection_id: int, details: dict) -> None
 def get_connection_details(connection_id: int) -> dict | None
+```
+
+### Helper Functions
+```python
+def _fuzzy_match(s1: str, s2: str) -> bool
+    # Fuzzy matching using common abbreviations
+
+def _cosine_similarity(vec1: list[float], vec2: list[float]) -> float
+    # Calculate cosine similarity between vectors
 ```
 
 ---
