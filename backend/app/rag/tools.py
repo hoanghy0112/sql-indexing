@@ -9,9 +9,8 @@ import json
 from typing import Any
 
 import asyncpg
-from langchain_core.pydantic_v1 import BaseModel as LangchainBaseModel
-from langchain_core.pydantic_v1 import Field as LangchainField
 from langchain_core.tools import StructuredTool
+from pydantic import BaseModel, Field
 
 from app.config import get_settings
 from app.database import get_session_context
@@ -20,37 +19,37 @@ from app.intelligence.vectorizer import embed_text, search_similar
 settings = get_settings()
 
 
-class SearchDatabaseInput(LangchainBaseModel):
+class SearchDatabaseInput(BaseModel):
     """Input schema for search_database_data tool."""
 
-    query: str = LangchainField(description="The search query to find relevant tables and columns")
-    connection_id: int = LangchainField(description="The database connection ID to search")
-    limit: int = LangchainField(default=5, description="Maximum number of results to return")
+    query: str = Field(description="The search query to find relevant tables and columns")
+    connection_id: int = Field(description="The database connection ID to search")
+    limit: int = Field(default=5, description="Maximum number of results to return")
 
 
-class ExecuteSQLInput(LangchainBaseModel):
+class ExecuteSQLInput(BaseModel):
     """Input schema for execute_sql tool."""
 
-    sql: str = LangchainField(description="The SQL query to execute")
-    connection_id: int = LangchainField(description="The database connection ID")
+    sql: str = Field(description="The SQL query to execute")
+    connection_id: int = Field(description="The database connection ID")
 
 
-class GetTableInsightsInput(LangchainBaseModel):
+class GetTableInsightsInput(BaseModel):
     """Input schema for get_table_insights tool."""
 
-    connection_id: int = LangchainField(description="The database connection ID")
-    table_names: list[str] = LangchainField(
+    connection_id: int = Field(description="The database connection ID")
+    table_names: list[str] = Field(
         description="List of table names to get insights for"
     )
 
 
-class SearchByIndexInput(LangchainBaseModel):
+class SearchByIndexInput(BaseModel):
     """Input schema for search_by_index tool."""
 
-    connection_id: int = LangchainField(description="The database connection ID")
-    table_name: str = LangchainField(description="The table name to search in")
-    column_name: str = LangchainField(description="The column name to search")
-    search_term: str = LangchainField(
+    connection_id: int = Field(description="The database connection ID")
+    table_name: str = Field(description="The table name to search in")
+    column_name: str = Field(description="The column name to search")
+    search_term: str = Field(
         description="The term to search for (can be synonym or approximate value)"
     )
 

@@ -45,7 +45,7 @@ setup-frontend: ## Install only frontend dependencies
 dev: ## Start all services for development (infrastructure + local watch mode)
 	@echo "$(GREEN)Starting development environment...$(NC)"
 	@echo "$(CYAN)Starting infrastructure services...$(NC)"
-	docker compose up -d system-db qdrant redis kafka zookeeper ollama
+	docker compose up -d system-db qdrant redis kafka zookeeper ollama phoenix
 	@echo "$(CYAN)Waiting for services to be ready...$(NC)"
 	@sleep 5
 	@echo ""
@@ -54,6 +54,7 @@ dev: ## Start all services for development (infrastructure + local watch mode)
 	@echo "  $(CYAN)Qdrant:$(NC)         http://localhost:6333/dashboard"
 	@echo "  $(CYAN)Redis:$(NC)          localhost:6379"
 	@echo "  $(CYAN)Ollama:$(NC)         http://localhost:$${OLLAMA_PORT:-11435}"
+	@echo "  $(CYAN)Phoenix:$(NC)        http://localhost:$${PHOENIX_PORT:-6006}"
 	@echo ""
 	@echo "$(GREEN)Starting backend and frontend in watch mode...$(NC)"
 	@echo "  $(CYAN)Backend API:$(NC)    http://localhost:8000"
@@ -73,12 +74,13 @@ dev-docker: ## Start all services via Docker (no local watch mode)
 	@echo "  $(CYAN)Frontend:$(NC)       http://localhost:3000"
 	@echo "  $(CYAN)Qdrant UI:$(NC)      http://localhost:6333/dashboard"
 	@echo "  $(CYAN)Ollama:$(NC)         http://localhost:11434"
+	@echo "  $(CYAN)Phoenix:$(NC)        http://localhost:$${PHOENIX_PORT:-6006}"
 	@echo ""
 	@echo "$(YELLOW)Run 'make logs' to view logs$(NC)"
 
 dev-backend: ## Start only backend with dependencies (watch mode)
 	@echo "$(GREEN)Starting backend services...$(NC)"
-	docker compose up -d system-db qdrant redis ollama
+	docker compose up -d system-db qdrant redis ollama phoenix
 	@echo "$(CYAN)Waiting for services to be ready...$(NC)"
 	sleep 5
 	cd backend && poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
@@ -225,3 +227,6 @@ health: ## Check health of all services
 	@echo ""
 	@echo "Ollama:"
 	@curl -sf http://localhost:11434/api/tags > /dev/null && echo "  $(GREEN)✓ Healthy$(NC)" || echo "  $(RED)✗ Unhealthy$(NC)"
+	@echo ""
+	@echo "Phoenix:"
+	@curl -sf http://localhost:6006/healthz > /dev/null && echo "  $(GREEN)✓ Healthy$(NC)" || echo "  $(RED)✗ Unhealthy$(NC)"

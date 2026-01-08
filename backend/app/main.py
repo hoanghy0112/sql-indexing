@@ -4,6 +4,7 @@ Database RAG & Analytics Platform - FastAPI Application
 Main entry point for the backend API server.
 """
 
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -24,10 +25,44 @@ from app.users.router import router as users_router
 settings = get_settings()
 
 
+logger = logging.getLogger(__name__)
+
+
+def _init_phoenix_tracing() -> None:
+    """Initialize Phoenix observability tracing if enabled."""
+    if not settings.phoenix_enabled:
+        logger.info("Phoenix tracing is disabled")
+        return
+
+    try:
+        from phoenix.otel import register
+
+        # Register Phoenix tracer with auto instrumentation
+        register(
+            project_name=settings.phoenix_project_name,
+            endpoint=settings.phoenix_collector_endpoint if settings.phoenix_collector_endpoint else None,
+            batch=True,
+            auto_instrument=True,
+        )
+        logger.info(
+            f"Phoenix tracing initialized: project={settings.phoenix_project_name}, "
+            f"endpoint={settings.phoenix_collector_endpoint or 'default'}"
+        )
+
+    except ImportError:
+        logger.warning(
+            "Phoenix packages not installed. Run: "
+            "pip install arize-phoenix-otel openinference-instrumentation-langchain"
+        )
+    except Exception as e:
+        logger.warning(f"Failed to initialize Phoenix tracing: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan handler."""
     # Startup
+    _init_phoenix_tracing()
     await init_db()
     yield
     # Shutdown

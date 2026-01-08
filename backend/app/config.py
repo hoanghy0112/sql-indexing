@@ -105,6 +105,25 @@ class Settings(BaseSettings):
         alias="CORS_ORIGINS",
     )
 
+    # ==========================================================================
+    # Phoenix Observability Settings
+    # ==========================================================================
+    phoenix_enabled: bool = Field(
+        default=True,
+        alias="PHOENIX_ENABLED",
+        description="Enable Phoenix AI observability tracing",
+    )
+    phoenix_collector_endpoint: str | None = Field(
+        default="http://localhost:6006/v1/traces",
+        alias="PHOENIX_COLLECTOR_ENDPOINT",
+        description="Phoenix collector endpoint for OpenTelemetry traces (None for local Phoenix)",
+    )
+    phoenix_project_name: str = Field(
+        default="sql-indexing-agent",
+        alias="PHOENIX_PROJECT_NAME",
+        description="Project name for trace grouping in Phoenix",
+    )
+
     @property
     def database_url_sync(self) -> str:
         """Get synchronous database URL (for Alembic migrations)."""

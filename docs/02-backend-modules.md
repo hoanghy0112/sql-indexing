@@ -30,12 +30,29 @@ Entry point for the FastAPI application.
 - Configure CORS middleware
 - Register all routers with prefixes
 - Handle application lifecycle (startup/shutdown)
+- **Initialize Phoenix observability tracing** (when enabled)
 
 ### Key Components
 
+#### Phoenix Tracing Initialization
+```python
+def _init_phoenix_tracing() -> None:
+    """Initialize Phoenix observability tracing if enabled."""
+    if settings.phoenix_enabled:
+        from phoenix.otel import register
+        register(
+            project_name=settings.phoenix_project_name,
+            endpoint=settings.phoenix_collector_endpoint if settings.phoenix_collector_endpoint else None,
+            batch=True,
+            auto_instrument=True,
+        )
+```
+
+#### Lifespan Handler
 ```python
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _init_phoenix_tracing()  # Initialize tracing
     await init_db()  # Create tables on startup
     yield
     await close_db()  # Close connections on shutdown
@@ -76,6 +93,11 @@ Centralized configuration using Pydantic Settings.
 - `ollama_base_url`: Ollama server URL
 - `ollama_model`: Model name (default: `qwen2.5:3b`)
 - `embedding_model`: Sentence transformer model
+
+#### Phoenix Observability Settings
+- `phoenix_enabled`: Enable/disable Phoenix tracing (default: `true`)
+- `phoenix_endpoint`: Phoenix collector endpoint (default: `http://localhost:6006/v1/traces`)
+- `phoenix_project_name`: Project name for trace grouping (default: `sql-indexing-agent`)
 
 #### Analysis Settings
 - `category_threshold`: Max distinct values for categorical (100)

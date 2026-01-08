@@ -126,6 +126,24 @@ services:
     networks:
       - sqlindex-network
 
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    container_name: sqlindex-phoenix
+    restart: unless-stopped
+    ports:
+      - "${PHOENIX_PORT:-6006}:6006"
+    volumes:
+      - phoenix_data:/data
+    environment:
+      - PHOENIX_WORKING_DIR=/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6006/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - sqlindex-network
+
   backend:
     build:
       context: ./backend
@@ -148,6 +166,9 @@ services:
       - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
       - JWT_ALGORITHM=HS256
       - JWT_EXPIRE_MINUTES=${JWT_EXPIRE_MINUTES:-1440}
+      - PHOENIX_ENABLED=${PHOENIX_ENABLED:-true}
+      - PHOENIX_COLLECTOR_ENDPOINT=http://phoenix:6006/v1/traces
+      - PHOENIX_PROJECT_NAME=${PHOENIX_PROJECT_NAME:-sql-indexing-agent}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
@@ -185,6 +206,7 @@ volumes:
   kafka_data:
   ollama_data:
   redis_data:
+  phoenix_data:
 
 networks:
   sqlindex-network:

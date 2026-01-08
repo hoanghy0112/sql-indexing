@@ -15,8 +15,9 @@ import json
 import re
 from typing import Any, TypedDict
 
+from langchain_core.messages import HumanMessage
+from langchain_ollama import ChatOllama
 from langgraph.graph import END, StateGraph
-from ollama import Client
 
 from app.config import get_settings
 from app.rag.tools import (
@@ -28,6 +29,28 @@ from app.rag.tools import (
 )
 
 settings = get_settings()
+
+# Initialize LLM clients with different settings
+llm_intent = ChatOllama(
+    model=settings.ollama_model,
+    base_url=settings.ollama_base_url,
+    temperature=0.1,
+    num_predict=300,
+)
+
+llm_sql = ChatOllama(
+    model=settings.ollama_model,
+    base_url=settings.ollama_base_url,
+    temperature=0.1,
+    num_predict=500,
+)
+
+llm_explain = ChatOllama(
+    model=settings.ollama_model,
+    base_url=settings.ollama_base_url,
+    temperature=0.3,
+    num_predict=150,
+)
 
 # Maximum SQL retry attempts on syntax errors
 MAX_SQL_RETRIES = 3
@@ -97,16 +120,9 @@ For greetings like "Hello", respond with:
 Respond ONLY with valid JSON, no other text.
 """
 
-    client = Client(host=settings.ollama_base_url)
-
     try:
-        response = client.chat(
-            model=settings.ollama_model,
-            messages=[{"role": "user", "content": prompt}],
-            options={"temperature": 0.1, "num_predict": 300},
-        )
-
-        content = response["message"]["content"]
+        response = llm_intent.invoke([HumanMessage(content=prompt)])
+        content = response.content
         content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
 
         # Try to parse JSON
@@ -385,16 +401,9 @@ Rules:
 SQL:
 """
 
-    client = Client(host=settings.ollama_base_url)
-
     try:
-        response = client.chat(
-            model=settings.ollama_model,
-            messages=[{"role": "user", "content": sql_prompt}],
-            options={"temperature": 0.1, "num_predict": 500},
-        )
-
-        content = response["message"]["content"]
+        response = llm_sql.invoke([HumanMessage(content=sql_prompt)])
+        content = response.content
         content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
 
         # Extract SQL from response
@@ -508,16 +517,9 @@ Sample data: {sample_str}
 Give a 1-2 sentence summary of what the data shows. Be concise.
 """
 
-    client = Client(host=settings.ollama_base_url)
-
     try:
-        response = client.chat(
-            model=settings.ollama_model,
-            messages=[{"role": "user", "content": prompt}],
-            options={"temperature": 0.3, "num_predict": 150},
-        )
-
-        content = response["message"]["content"]
+        response = llm_explain.invoke([HumanMessage(content=prompt)])
+        content = response.content
         content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
         return content
 
