@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import ReactMarkdown from 'react-markdown'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -815,10 +816,14 @@ export default function DatabasePage() {
                                                                 onClick={(e) => e.stopPropagation()}
                                                             />
                                                         ) : (
-                                                            <div className="bg-muted/50 rounded-md p-4 max-h-[400px] overflow-auto">
-                                                                <pre className="text-sm whitespace-pre-wrap font-mono">
-                                                                    {insight.insight_document || 'No document generated yet.'}
-                                                                </pre>
+                                                            <div className="bg-muted/50 rounded-md p-4 max-h-[400px] overflow-auto prose prose-sm dark:prose-invert max-w-none">
+                                                                {insight.insight_document ? (
+                                                                    <ReactMarkdown>
+                                                                        {insight.insight_document}
+                                                                    </ReactMarkdown>
+                                                                ) : (
+                                                                    <p className="text-muted-foreground">No document generated yet.</p>
+                                                                )}
                                                             </div>
                                                         )}
                                                     </div>
