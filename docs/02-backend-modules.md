@@ -486,31 +486,55 @@ async def analyze_database(connection_id: int) -> None:
 
 **Directory**: `app/agent/`
 
-LangGraph-based multi-step agent for natural language database queries.
+LangGraph-based multi-step agent for natural language database queries using a two-agent architecture.
 
 ### Files
 - `router.py` - API endpoints
-- `graph.py` - LangGraph workflow
+- `graph.py` - Orchestrator between agents
+- `greeting_agent.py` - Fast greeting handler (no LLM)
+- `reasoning_agent.py` - Full RAG workflow agent
 - `models.py` - Chat session models
 
-### Agent Workflow
+### Two-Agent Architecture
 
 ```mermaid
-graph LR
-    A[User Question] --> B[Understand Node]
-    B --> C[Retrieve Node]
-    C --> D[Enrich Node]
-    D --> E[Search Values Node]
-    E --> F[Generate Node]
-    F -->|SQL Error| F
-    F --> G[Response]
+graph TB
+    A[User Question] --> B[Greeting Agent]
+    B -->|Is Greeting| C[Fast Response with DB Info]
+    B -->|Needs Reasoning| D[Reasoning Agent]
+    D --> E[Retrieve Node]
+    E --> F[Enrich Node]
+    F --> G[Search Values Node]
+    G --> H[Generate Node]
+    H -->|SQL Error| H
+    H --> I[Response with Data]
 ```
 
-#### Understand Node
-- Parses user intent using LLM
-- Extracts searchable terms (values that might need resolution)
-- Identifies data requirements, filters, aggregations
-- Handles greetings specially
+### Greeting Agent (`greeting_agent.py`)
+
+Fast, lightweight agent that handles simple interactions **without LLM calls**:
+
+- **Pattern-based classification**: Uses regex to detect greetings vs questions
+- **DB context loading**: Fetches basic table info from database
+- **Instant response**: Generates greeting with table summaries
+
+```python
+class GreetingAgentState(TypedDict):
+    question: str
+    connection_id: int
+    db_info: dict | None      # Basic DB context
+    is_greeting: bool
+    needs_reasoning: bool     # Route to reasoning agent
+    response: str | None
+```
+
+**Greeting Patterns**:
+- "Hello", "Hi", "Hey", "Good morning/afternoon/evening"
+- Short messages (≤3 words) without question indicators
+
+### Reasoning Agent (`reasoning_agent.py`)
+
+Full RAG workflow for database questions:
 
 #### Retrieve Node
 - Searches Qdrant for semantically similar tables
@@ -533,9 +557,8 @@ graph LR
 - **Retry logic**: On SQL syntax errors, retries up to 3 times with error context
 - Generates natural language explanation
 
-### Agent State
 ```python
-class AgentState(TypedDict):
+class ReasoningAgentState(TypedDict):
     # Input
     question: str
     connection_id: int
@@ -543,13 +566,13 @@ class AgentState(TypedDict):
     
     # Intermediate
     intent: str | None
-    searchable_terms: list[dict] | None  # Terms to search for in indexes
+    searchable_terms: list[dict] | None
     relevant_tables: list[dict] | None
-    table_insights: list[dict] | None    # Detailed table/column metadata
-    resolved_values: dict | None         # Mapping of user terms to actual values
+    table_insights: list[dict] | None
+    resolved_values: dict | None
     generated_sql: str | None
-    sql_attempts: int                    # Number of SQL generation attempts
-    last_sql_error: str | None           # Last SQL error for retry context
+    sql_attempts: int
+    last_sql_error: str | None
     
     # Output
     response: str | None
@@ -592,6 +615,7 @@ class ChatMessage(SQLModel, table=True):
 | DELETE | `/chat/{connection_id}/sessions/{id}` | Delete session |
 | POST | `/chat/{connection_id}/sessions/{id}/share` | Toggle public sharing |
 | GET | `/chat/public/{share_token}` | Get public chat (no auth) |
+
 
 ---
 
